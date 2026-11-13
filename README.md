@@ -22,8 +22,9 @@ Early work. Implemented and tested:
 - **Case tools** (`tools.py`): `classify_case`, `compute_entitlement` and `deadline_calendar` turn case facts (JSON) into cited outcomes, rupee amounts and dated deadlines, with every number coming from the rules engine.
 - **Screenshot extraction** (`extract.py`): Tesseract OCR in English and Hindi, redaction of OTPs, PINs, CVVs, Aadhaar and card numbers before anything else sees the text (including secrets typed into chat), and field parsing (amount, UTR, date, UPI ID, account last four). Nothing is guessed; missing fields stay empty. On the 15 synthetic test images it reads every field correctly, but those images are clean and the code was tuned on them, so expect lower accuracy on real screenshots.
 - **Agent on AWS** (`agentcore/`, `app/`): a Strands agent on Amazon Bedrock AgentCore Runtime using Claude Sonnet 4.6. It interviews the user, calls the case tools through an AgentCore Gateway backed by a Lambda, and explains the results. It runs deployed in us-east-1.
+- **Screenshot reading on AWS** (`infra/extract/`): a container-image Lambda running Tesseract reads screenshots uploaded to an encrypted S3 bucket (objects expire after one day) and returns the confirmed-by-the-user fields; the agent reaches it through the same Gateway.
 
-Not built yet: reading screenshots inside the agent (the Tesseract Lambda), document drafting, reminders, and the web interface.
+Not built yet: document drafting, reminders, and the web interface.
 
 ## Safety and legal limits
 
@@ -66,8 +67,9 @@ Regenerate the synthetic sample images and score the extraction against their gr
 | `app/agent/` | Strands agent (AgentCore Runtime) |
 | `app/tools/` | Gateway Lambda that dispatches the case tools |
 | `agentcore/` | AgentCore project config and CDK app |
+| `infra/extract/` | Tesseract Lambda image, upload bucket stack and tool schema |
 | `tests/` | Unit tests and synthetic fixtures |
-| `scripts/` | Sample generator and OCR scoring |
+| `scripts/` | Sample generator, OCR scoring, deploy and commit-check scripts |
 | `docs/rbi-rules-verification.md` | Sources, paragraph citations and open items |
 
 ## Related work
