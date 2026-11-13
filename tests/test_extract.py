@@ -61,3 +61,34 @@ def test_parse_hindi_sms_and_month_name_date():
 def test_missing_fields_stay_none_rather_than_guessed():
     t = parse_transaction("Payment successful")
     assert (t.amount, t.utr, t.txn_date, t.counterparty) == (None, None, None, None)
+
+
+# ---- chat input -------------------------------------------------------------------------
+
+from liability_lens.extract import redact_message  # noqa: E402
+
+
+@pytest.mark.parametrize("text", [
+    "a caller got her to read out OTPs, the last one was 482913.",
+    "She shared the OTP with him. Later he asked for her PIN and she said 4417",
+    "उसने ओटीपी बताया, आखिरी वाला 482913 था",
+    "my mpin is 2580",
+])
+def test_chat_secret_far_from_keyword_is_removed(text):
+    clean, kinds = redact_message(text)
+    assert "482913" not in clean and "4417" not in clean and "2580" not in clean
+    assert "secret" in kinds
+
+
+def test_chat_keeps_years_amounts_times_and_last4():
+    text = ("On 4 Jan 2027 at 11:02 she read out the OTP and Rs 25000 left account XX4821. "
+            "Rs 15,000 more went at 11:09.")
+    clean, kinds = redact_message(text)
+    assert clean == ("On 4 Jan 2027 at 11:02 she read out the OTP and Rs 25000 left account XX4821. "
+                     "Rs 15,000 more went at 11:09.")
+    assert kinds == []
+
+
+def test_chat_numbers_left_alone_without_secret_words():
+    clean, kinds = redact_message("The caller's number ended 482913 and the ticket was 5521.")
+    assert "482913" in clean and kinds == []

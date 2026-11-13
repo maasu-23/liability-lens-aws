@@ -13,7 +13,6 @@ import tempfile
 from dataclasses import dataclass
 from datetime import date
 
-from PIL import Image, ImageOps
 
 DEVANAGARI_DIGITS = str.maketrans("०१२३४५६७८९", "0123456789")
 MONTHS = {m: i for i, m in enumerate(
@@ -22,6 +21,8 @@ MONTHS = {m: i for i, m in enumerate(
 
 def _prepare(image_path: str, target_width: int, tmp_dir: str) -> str:
     """Grayscale, upscale to a target width and pad: Tesseract drops edge characters on small images."""
+    from PIL import Image, ImageOps  # imported here so redact() works without Pillow
+
     img = Image.open(image_path).convert("L")
     if img.width < target_width:
         scale = target_width / img.width
@@ -48,7 +49,7 @@ _SECRET_WORDS = r"(?:\b(?:otp|pin|cvv|cvc|password|passcode)\b|ओटीपी|�
 _REDACTIONS: list[tuple[str, re.Pattern[str], str]] = [
     # order matters: the lookahead pattern needs the word OTP, which the next pattern would consume
     ("secret", re.compile(r"(?i)\b\d{4,8}\b(?=\s+is\s+(?:your\s+|the\s+)?(?:otp|one[- ]time))"), "[SECRET REMOVED]"),
-    ("secret", re.compile(rf"(?i){_SECRET_WORDS}[^\d\n]{{0,20}}\d{{2,8}}"), "[SECRET REMOVED]"),
+    ("secret", re.compile(rf"(?i){_SECRET_WORDS}(?:(?!rs\b|inr\b|₹|rupee)[^\d\n]){{0,20}}\d{{2,8}}"), "[SECRET REMOVED]"),  # stop at a currency marker: "OTP and Rs 25000" is an amount
     ("card", re.compile(r"\b(?:\d[ -]?){12,18}\d\b"), None),
     ("aadhaar", re.compile(r"\b\d{4}\s\d{4}\s\d{4}\b"), "[AADHAAR REMOVED]"),
     ("account", re.compile(r"\b(?:\d{9,11}|\d{13,18})\b"), None),  # 12 digits is left alone: UTR
@@ -71,6 +72,36 @@ def redact(text: str) -> tuple[str, list[str]]:
         text = pattern.sub(sub, text)
     return text, found
 
+
+
+_MENTIONS_SECRET = re.compile(r"(?i)\b(?:otps?|pins?|mpin|cvv|cvc|passwords?|passcodes?)\b|ओटीपी|पिन|पासवर्ड")
+_LOOSE_CODE = re.compile(r"(?<![\w.,:/₹-])\d{4,8}(?![\w,:/-])")
+_CURRENCY_BEFORE = re.compile(r"(?i)(?:rs\.?|inr|₹|rupees?|रु\.?)\s*$")
+_SENTENCE = re.compile(r"[^.!?\n।]*[.!?\n।]?")
+
+
+def redact_message(text: str) -> tuple[str, list[str]]:
+    """redact() for free-form chat. People write "OTPs ... the last one was 482913", far from the
+    keyword, so in any sentence that mentions a secret, also mask standalone 4-8 digit codes.
+    Years (1900-2099), rupee amounts, times and masked account numbers are left alone."""
+    text, found = redact(text)
+
+    def mask(m: re.Match[str], sentence: str) -> str:
+        code = m.group(0)
+        if len(code) == 4 and 1900 <= int(code) <= 2099:
+            return code
+        if _CURRENCY_BEFORE.search(sentence[: m.start()]):
+            return code
+        found.append("secret")
+        return "[SECRET REMOVED]"
+
+    def per_sentence(s: re.Match[str]) -> str:
+        sentence = s.group(0)
+        if not _MENTIONS_SECRET.search(sentence):
+            return sentence
+        return _LOOSE_CODE.sub(lambda m: mask(m, sentence), sentence)
+
+    return _SENTENCE.sub(per_sentence, text), found
 
 # ---- field extraction --------------------------------------------------------------------
 
