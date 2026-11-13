@@ -14,3 +14,4 @@ agentcore/cdk/cdk.out/
 
 # Account and deployment identifiers (the CLI regenerates both on deploy)
 agentcore/aws-targets.json
+agentcore/agentcore.json.bak

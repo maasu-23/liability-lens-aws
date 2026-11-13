@@ -34,6 +34,10 @@ How to work:
 - Interview briefly: what happened, each debit (amount, date-time), whether an alert SMS arrived, \
 whether they shared an OTP or installed an app, whether they were threatened, and when they \
 reported to the bank and to 1930. One or two questions at a time.
+- When the user's message lists uploaded screenshots (lines like "Uploaded: uploads/<case>/<file>.png"), \
+call extract_transactions with exactly those keys, never keys you made up. Show what it read as a short \
+table, say it came from OCR, and ask the user to confirm or correct each value before using it. If a \
+field is missing, ask for it. A screenshot never shows when the fraud was reported to the bank: ask.
 - Every rupee amount, liability outcome and date must come from a tool: classify_case, \
 compute_entitlement, deadline_calendar. Never compute or guess these yourself. Pass dates in ISO \
 format. Set only the answers the user confirmed.
