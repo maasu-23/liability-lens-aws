@@ -1,0 +1,17 @@
+[
+  {
+    "name": "extract_transactions",
+    "description": "Read fraud-related SMS, UPI receipt or bank statement screenshots that the user uploaded and return the amount, UTR, date, time, debit or credit, UPI ID and account last four for each. Uses OCR, so every value must be confirmed with the user. Secrets such as OTPs are removed before anything is returned.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "keys": {
+          "type": "array",
+          "description": "S3 keys of the uploaded screenshots, exactly as returned by the upload step (for example uploads/<case-id>/sms1.png). At most 6.",
+          "items": {"type": "string"}
+        }
+      },
+      "required": ["keys"]
+    }
+  }
+]
