@@ -2,3 +2,15 @@
 __pycache__/
 .pytest_cache/
 .env
+
+# AgentCore (from the CLI template)
+.env.local
+.env*.local
+*.py[cod]
+node_modules/
+agentcore/.cli/
+agentcore/.cache/
+agentcore/cdk/cdk.out/
+
+# Account and deployment identifiers (the CLI regenerates both on deploy)
+agentcore/aws-targets.json

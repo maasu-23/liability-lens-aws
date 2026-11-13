@@ -1,0 +1,410 @@
+{
+  "name": "LiabilityLens",
+  "version": 2,
+  "managedBy": "CDK",
+  "runtimes": [
+    {
+      "name": "agent",
+      "modelProvider": "Bedrock",
+      "build": "CodeZip",
+      "entrypoint": "main.py",
+      "codeLocation": "app/agent",
+      "runtimeVersion": "PYTHON_3_14",
+      "protocol": "HTTP"
+    }
+  ],
+  "memories": [
+    {
+      "name": "agentMemory",
+      "eventExpiryDuration": 7,
+      "strategies": []
+    }
+  ],
+  "knowledgeBases": [],
+  "credentials": [],
+  "evaluators": [],
+  "onlineEvalConfigs": [],
+  "agentCoreGateways": [
+    {
+      "name": "tools",
+      "protocolType": "None",
+      "targets": [
+        {
+          "name": "case",
+          "targetType": "lambda",
+          "toolDefinitions": [
+            {
+              "name": "classify_case",
+              "description": "Candidate RBI liability outcome for each fraudulent transaction under each possible cause, with the paragraph cited. Picks the 2017 or 2026 rules per transaction date.",
+              "inputSchema": {
+                "type": "object",
+                "properties": {
+                  "entity": {
+                    "type": "string",
+                    "description": "Bank type: CB (commercial), SFB, PB (payments bank), LAB, RRB, UCB or RCB. Default CB"
+                  },
+                  "account_type": {
+                    "type": "string",
+                    "description": "BSBD, SB, PPI_GIFT, MSME_CA_CC_OD, INDIV_CA_CC_OD_UPTO_25L, CC_UPTO_5L, OTHER_CA_CC_OD or CC_ABOVE_5L. Default SB"
+                  },
+                  "individual": {
+                    "type": "boolean",
+                    "description": "True for an individual or sole proprietor"
+                  },
+                  "answers": {
+                    "type": "object",
+                    "description": "Interview facts. Set only what the user confirmed; omit unknowns.",
+                    "properties": {
+                      "missing_sms_alert_over_500": {
+                        "type": "boolean",
+                        "description": "A debit above Rs 500 came with no SMS alert from the bank"
+                      },
+                      "bank_ignored_notification": {
+                        "type": "boolean",
+                        "description": "The bank did not act on the customer's fraud report"
+                      },
+                      "bank_system_breach": {
+                        "type": "boolean",
+                        "description": "Bank system breach or internal fraud"
+                      },
+                      "sim_swap_or_telecom_fault": {
+                        "type": "boolean",
+                        "description": "SIM swap or telecom operator failure"
+                      },
+                      "tpap_pa_pg_breach": {
+                        "type": "boolean",
+                        "description": "Failure of a UPI app, payment aggregator or payment gateway"
+                      },
+                      "shared_credentials": {
+                        "type": "boolean",
+                        "description": "The customer shared an OTP, PIN, password or card details with someone"
+                      },
+                      "ignored_specific_bank_warning": {
+                        "type": "boolean",
+                        "description": "The customer ignored a specific warning from the bank"
+                      },
+                      "installed_malicious_app": {
+                        "type": "boolean",
+                        "description": "The customer installed a screen-sharing or remote-access app at someone's request"
+                      },
+                      "coerced_approval": {
+                        "type": "boolean",
+                        "description": "The customer approved payments under threat or duress, e.g. a 'digital arrest' call"
+                      },
+                      "pure_deception_no_credentials_no_coercion": {
+                        "type": "boolean",
+                        "description": "The customer was tricked into paying with no credentials shared and no threat"
+                      }
+                    }
+                  },
+                  "transactions": {
+                    "type": "array",
+                    "description": "Each fraudulent debit",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "description": "Short id such as t1"
+                        },
+                        "amount": {
+                          "type": "number",
+                          "description": "Amount debited, in rupees"
+                        },
+                        "txn_at": {
+                          "type": "string",
+                          "description": "Transaction date-time, ISO format, e.g. 2027-01-04T11:02"
+                        },
+                        "alert_received_date": {
+                          "type": "string",
+                          "description": "Date the bank's SMS or email alert arrived, ISO date; omit if none"
+                        },
+                        "cross_border": {
+                          "type": "boolean",
+                          "description": "True if the payment went abroad"
+                        }
+                      },
+                      "required": [
+                        "amount",
+                        "txn_at"
+                      ]
+                    }
+                  },
+                  "bank_reported_at": {
+                    "type": "string",
+                    "description": "When the fraud was reported to the bank, ISO date-time (from the bank's acknowledgement if possible)"
+                  },
+                  "ncrp_reported_at": {
+                    "type": "string",
+                    "description": "When it was reported on 1930 or cybercrime.gov.in, ISO date-time"
+                  }
+                },
+                "required": [
+                  "transactions",
+                  "bank_reported_at"
+                ]
+              }
+            },
+            {
+              "name": "compute_entitlement",
+              "description": "Rupee entitlement: 76T compensation (85% of net loss up to Rs 25,000) with the RBI and bank split for 2027+ frauds, and 2017-rule liability caps for older ones. Optionally recalculates after money is recovered later.",
+              "inputSchema": {
+                "type": "object",
+                "properties": {
+                  "entity": {
+                    "type": "string",
+                    "description": "Bank type: CB (commercial), SFB, PB (payments bank), LAB, RRB, UCB or RCB. Default CB"
+                  },
+                  "account_type": {
+                    "type": "string",
+                    "description": "BSBD, SB, PPI_GIFT, MSME_CA_CC_OD, INDIV_CA_CC_OD_UPTO_25L, CC_UPTO_5L, OTHER_CA_CC_OD or CC_ABOVE_5L. Default SB"
+                  },
+                  "individual": {
+                    "type": "boolean",
+                    "description": "True for an individual or sole proprietor"
+                  },
+                  "answers": {
+                    "type": "object",
+                    "description": "Interview facts. Set only what the user confirmed; omit unknowns.",
+                    "properties": {
+                      "missing_sms_alert_over_500": {
+                        "type": "boolean",
+                        "description": "A debit above Rs 500 came with no SMS alert from the bank"
+                      },
+                      "bank_ignored_notification": {
+                        "type": "boolean",
+                        "description": "The bank did not act on the customer's fraud report"
+                      },
+                      "bank_system_breach": {
+                        "type": "boolean",
+                        "description": "Bank system breach or internal fraud"
+                      },
+                      "sim_swap_or_telecom_fault": {
+                        "type": "boolean",
+                        "description": "SIM swap or telecom operator failure"
+                      },
+                      "tpap_pa_pg_breach": {
+                        "type": "boolean",
+                        "description": "Failure of a UPI app, payment aggregator or payment gateway"
+                      },
+                      "shared_credentials": {
+                        "type": "boolean",
+                        "description": "The customer shared an OTP, PIN, password or card details with someone"
+                      },
+                      "ignored_specific_bank_warning": {
+                        "type": "boolean",
+                        "description": "The customer ignored a specific warning from the bank"
+                      },
+                      "installed_malicious_app": {
+                        "type": "boolean",
+                        "description": "The customer installed a screen-sharing or remote-access app at someone's request"
+                      },
+                      "coerced_approval": {
+                        "type": "boolean",
+                        "description": "The customer approved payments under threat or duress, e.g. a 'digital arrest' call"
+                      },
+                      "pure_deception_no_credentials_no_coercion": {
+                        "type": "boolean",
+                        "description": "The customer was tricked into paying with no credentials shared and no threat"
+                      }
+                    }
+                  },
+                  "transactions": {
+                    "type": "array",
+                    "description": "Each fraudulent debit",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "description": "Short id such as t1"
+                        },
+                        "amount": {
+                          "type": "number",
+                          "description": "Amount debited, in rupees"
+                        },
+                        "txn_at": {
+                          "type": "string",
+                          "description": "Transaction date-time, ISO format, e.g. 2027-01-04T11:02"
+                        },
+                        "alert_received_date": {
+                          "type": "string",
+                          "description": "Date the bank's SMS or email alert arrived, ISO date; omit if none"
+                        },
+                        "cross_border": {
+                          "type": "boolean",
+                          "description": "True if the payment went abroad"
+                        }
+                      },
+                      "required": [
+                        "amount",
+                        "txn_at"
+                      ]
+                    }
+                  },
+                  "bank_reported_at": {
+                    "type": "string",
+                    "description": "When the fraud was reported to the bank, ISO date-time (from the bank's acknowledgement if possible)"
+                  },
+                  "ncrp_reported_at": {
+                    "type": "string",
+                    "description": "When it was reported on 1930 or cybercrime.gov.in, ISO date-time"
+                  },
+                  "recoveries_credited": {
+                    "type": "number",
+                    "description": "Money already credited back to the customer, in rupees (not merely frozen)"
+                  },
+                  "later_recovery": {
+                    "type": "number",
+                    "description": "Money credited after compensation was paid, in rupees"
+                  },
+                  "lifetime_compensation_used": {
+                    "type": "boolean",
+                    "description": "True if the customer already received 76T compensation once"
+                  }
+                },
+                "required": [
+                  "transactions",
+                  "bank_reported_at",
+                  "ncrp_reported_at"
+                ]
+              }
+            },
+            {
+              "name": "deadline_calendar",
+              "description": "Every deadline in the case with days left: the 5-day reporting window, the bank's decision date, Ombudsman dates, and 2017-rule working-day deadlines.",
+              "inputSchema": {
+                "type": "object",
+                "properties": {
+                  "entity": {
+                    "type": "string",
+                    "description": "Bank type: CB (commercial), SFB, PB (payments bank), LAB, RRB, UCB or RCB. Default CB"
+                  },
+                  "account_type": {
+                    "type": "string",
+                    "description": "BSBD, SB, PPI_GIFT, MSME_CA_CC_OD, INDIV_CA_CC_OD_UPTO_25L, CC_UPTO_5L, OTHER_CA_CC_OD or CC_ABOVE_5L. Default SB"
+                  },
+                  "individual": {
+                    "type": "boolean",
+                    "description": "True for an individual or sole proprietor"
+                  },
+                  "answers": {
+                    "type": "object",
+                    "description": "Interview facts. Set only what the user confirmed; omit unknowns.",
+                    "properties": {
+                      "missing_sms_alert_over_500": {
+                        "type": "boolean",
+                        "description": "A debit above Rs 500 came with no SMS alert from the bank"
+                      },
+                      "bank_ignored_notification": {
+                        "type": "boolean",
+                        "description": "The bank did not act on the customer's fraud report"
+                      },
+                      "bank_system_breach": {
+                        "type": "boolean",
+                        "description": "Bank system breach or internal fraud"
+                      },
+                      "sim_swap_or_telecom_fault": {
+                        "type": "boolean",
+                        "description": "SIM swap or telecom operator failure"
+                      },
+                      "tpap_pa_pg_breach": {
+                        "type": "boolean",
+                        "description": "Failure of a UPI app, payment aggregator or payment gateway"
+                      },
+                      "shared_credentials": {
+                        "type": "boolean",
+                        "description": "The customer shared an OTP, PIN, password or card details with someone"
+                      },
+                      "ignored_specific_bank_warning": {
+                        "type": "boolean",
+                        "description": "The customer ignored a specific warning from the bank"
+                      },
+                      "installed_malicious_app": {
+                        "type": "boolean",
+                        "description": "The customer installed a screen-sharing or remote-access app at someone's request"
+                      },
+                      "coerced_approval": {
+                        "type": "boolean",
+                        "description": "The customer approved payments under threat or duress, e.g. a 'digital arrest' call"
+                      },
+                      "pure_deception_no_credentials_no_coercion": {
+                        "type": "boolean",
+                        "description": "The customer was tricked into paying with no credentials shared and no threat"
+                      }
+                    }
+                  },
+                  "transactions": {
+                    "type": "array",
+                    "description": "Each fraudulent debit",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "description": "Short id such as t1"
+                        },
+                        "amount": {
+                          "type": "number",
+                          "description": "Amount debited, in rupees"
+                        },
+                        "txn_at": {
+                          "type": "string",
+                          "description": "Transaction date-time, ISO format, e.g. 2027-01-04T11:02"
+                        },
+                        "alert_received_date": {
+                          "type": "string",
+                          "description": "Date the bank's SMS or email alert arrived, ISO date; omit if none"
+                        },
+                        "cross_border": {
+                          "type": "boolean",
+                          "description": "True if the payment went abroad"
+                        }
+                      },
+                      "required": [
+                        "amount",
+                        "txn_at"
+                      ]
+                    }
+                  },
+                  "bank_reported_at": {
+                    "type": "string",
+                    "description": "When the fraud was reported to the bank, ISO date-time (from the bank's acknowledgement if possible)"
+                  },
+                  "ncrp_reported_at": {
+                    "type": "string",
+                    "description": "When it was reported on 1930 or cybercrime.gov.in, ISO date-time"
+                  },
+                  "as_of": {
+                    "type": "string",
+                    "description": "Today's date for counting days left, ISO date. Leave empty for the real date"
+                  }
+                },
+                "required": [
+                  "transactions"
+                ]
+              }
+            }
+          ],
+          "compute": {
+            "host": "Lambda",
+            "implementation": {
+              "language": "Python",
+              "path": "app/tools",
+              "handler": "handler.handler"
+            },
+            "pythonVersion": "PYTHON_3_13",
+            "timeout": 30,
+            "memorySize": 256
+          }
+        }
+      ],
+      "authorizerType": "AWS_IAM",
+      "enableSemanticSearch": false,
+      "exceptionLevel": "NONE"
+    }
+  ],
+  "policyEngines": [],
+  "configBundles": [],
+  "harnesses": []
+}
