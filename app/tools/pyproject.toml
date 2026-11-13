@@ -1,0 +1,6 @@
+[project]
+name = "liability-lens-tools"
+version = "0.1.0"
+description = "Gateway Lambda exposing the Liability Lens rules engine as tools"
+requires-python = ">=3.12"
+dependencies = []
