@@ -15,6 +15,9 @@ import { randomBytes } from "node:crypto";
 export const MAX_ITEMS = 8;
 export const MAX_SETS_PER_SESSION = 3;
 export const MAX_SETS_PER_DAY = 25;
+export const MAX_SENDS_PER_SESSION = 6;  // the demo "send now" button
+export const MAX_SENDS_PER_DAY = 40;     // well under SES's sandbox quota of 200 a day
+const PREVIEW_ONLY_SECONDS = 3600;       // a preview-only record, with no address, lives an hour
 const IST_OFFSET_MIN = 330;
 const SEND_HOUR = "09:00:00";
 
@@ -152,7 +155,7 @@ export async function canDeliver(email) {
 export async function deliver(email, item) {
   const { subject, text } = emailFor(item);
   const preview = { subject, text, to: email };
-  if (!(await canDeliver(email))) return { delivered: false, preview };
+  if (!email || !(await canDeliver(email))) return { delivered: false, preview };
   await ses.send(new SendEmailCommand({
     FromEmailAddress: env().sender, Destination: { ToAddresses: [email] },
     Content: { Simple: { Subject: { Data: subject, Charset: "UTF-8" }, Body: { Text: { Data: text, Charset: "UTF-8" } } } },
@@ -165,32 +168,38 @@ export async function createReminders({ email, deadlines, sessionToken, sessionI
   const items = planReminders(deadlines);
   await bump(`remday#${today()}`, MAX_SETS_PER_DAY, "The demo has reached its reminder limit for today. Please try again tomorrow.");
   await bump(`remsess#${sessionToken}`, MAX_SETS_PER_SESSION, "You have set reminders three times in this session. Cancel one to set another.");
+  const deliverable = await canDeliver(email);
   const id = randomBytes(12).toString("base64url");
+  const nowSec = Math.floor(Date.now() / 1000);
+  // Only a verified address gets real schedules, and only then is it kept. Anyone else gets a one-hour, address-free
+  // record so the page can still show what would be sent: no schedules, nothing personal stored.
   const last = items[items.length - 1].at;
-  const expires = Math.floor(new Date(`${last}Z`).getTime() / 1000) + 2 * 86400;
+  const expires = deliverable ? Math.floor(new Date(`${last}Z`).getTime() / 1000) + 2 * 86400 : nowSec + PREVIEW_ONLY_SECONDS;
   await db.send(new PutItemCommand({
     TableName: env().table,
-    Item: { pk: s(`rem#${id}`), session: s(sessionId), email: s(email), items: { L: items.map(itemToAttr) },
-            created: n(Math.floor(Date.now() / 1000)), expires: n(expires) },
+    Item: { pk: s(`rem#${id}`), session: s(sessionId), email: s(deliverable ? email : ""), items: { L: items.map(itemToAttr) },
+            created: n(nowSec), expires: n(expires) },
   }));
-  const made = [];
-  try {
-    for (let i = 0; i < items.length; i++) {
-      await scheduler.send(new CreateScheduleCommand({
-        Name: `ll-${id}-${i}`, GroupName: env().group,
-        ScheduleExpression: `at(${items[i].at})`, ScheduleExpressionTimezone: "Asia/Kolkata",
-        FlexibleTimeWindow: { Mode: "OFF" }, ActionAfterCompletion: "DELETE",
-        Target: { Arn: env().target, RoleArn: env().role, Input: JSON.stringify({ id, n: i }),
-                  RetryPolicy: { MaximumRetryAttempts: 2, MaximumEventAgeInSeconds: 3600 } },
-      }));
-      made.push(i);
+  if (deliverable) {
+    const made = [];
+    try {
+      for (let i = 0; i < items.length; i++) {
+        await scheduler.send(new CreateScheduleCommand({
+          Name: `ll-${id}-${i}`, GroupName: env().group,
+          ScheduleExpression: `at(${items[i].at})`, ScheduleExpressionTimezone: "Asia/Kolkata",
+          FlexibleTimeWindow: { Mode: "OFF" }, ActionAfterCompletion: "DELETE",
+          Target: { Arn: env().target, RoleArn: env().role, Input: JSON.stringify({ id, n: i }),
+                    RetryPolicy: { MaximumRetryAttempts: 2, MaximumEventAgeInSeconds: 3600 } },
+        }));
+        made.push(i);
+      }
+    } catch (e) {
+      await cancelSchedules(id, made);
+      await db.send(new DeleteItemCommand({ TableName: env().table, Key: { pk: s(`rem#${id}`) } }));
+      throw e;
     }
-  } catch (e) {
-    await cancelSchedules(id, made);
-    await db.send(new DeleteItemCommand({ TableName: env().table, Key: { pk: s(`rem#${id}`) } }));
-    throw e;
   }
-  return { id, count: items.length, items: items.map(({ label, date, when, at }) => ({ label, date, when, at })), deliverable: await canDeliver(email) };
+  return { id, count: items.length, items: items.map(({ label, date, when, at }) => ({ label, date, when, at })), deliverable, scheduled: deliverable };
 }
 
 async function cancelSchedules(id, indexes) {
@@ -208,8 +217,10 @@ async function load(id, sessionId) {
 }
 
 /** Demo button: send one reminder right now instead of waiting for its date. It does not mark it sent, so the real one still goes out. */
-export async function sendNow({ id, sessionId, index }) {
+export async function sendNow({ id, sessionId, sessionToken, index }) {
   const rec = await load(id, sessionId);
+  await bump(`remsendday#${today()}`, MAX_SENDS_PER_DAY, "The demo has reached its limit for sample emails today. Please try again tomorrow.");
+  await bump(`remsend#${sessionToken}`, MAX_SENDS_PER_SESSION, `You have used all ${MAX_SENDS_PER_SESSION} sample emails for this session.`);
   const i = Number.isInteger(index) && index >= 0 && index < rec.items.length ? index : 0;
   const result = await deliver(rec.email, rec.items[i]);
   return { ...result, number: i + 1, of: rec.items.length };

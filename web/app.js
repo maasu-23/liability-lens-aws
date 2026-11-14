@@ -94,11 +94,21 @@ async function apiJson(path, payload) {
 }
 
 // ---- minimal, safe markdown for the model's replies -------------------------------------
+// The agent may link only to these official sites. A link to anywhere else (for example one planted by text hidden in a
+// screenshot) is shown as plain text, so a manipulated reply cannot send a victim to a look-alike page.
+const LINK_HOSTS = ["rbi.org.in", "cms.rbi.org.in", "cybercrime.gov.in", "pib.gov.in"];
+function trustedLink(rawEscaped) {
+  try {
+    const u = new URL(rawEscaped.replace(/&amp;/g, "&"));
+    return u.protocol === "https:" && !u.username && !u.password && LINK_HOSTS.some((h) => u.hostname === h || u.hostname.endsWith("." + h));
+  } catch { return false; }
+}
 function inline(s) {
   return esc(s)
     .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
     .replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, "$1<em>$2</em>")
-    .replace(/\[([^\]]+)\]\((https:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
+    .replace(/\[([^\]]+)\]\((https:\/\/[^\s)]+)\)/g, (all, text, url) =>
+      trustedLink(url) ? `<a href="${url}" target="_blank" rel="noopener noreferrer">${text}</a>` : `${text} (${url.replace(/^https:\/\//, "")})`)
     .replace(/`([^`]+)`/g, "<code>$1</code>");
 }
 function markdown(src) {
@@ -450,7 +460,7 @@ function renderCase() {
 // ---- email reminders ---------------------------------------------------------------------
 // Shown once the case has deadlines. Kept outside #case so typing an address is never wiped by a re-render.
 // The server only accepts the deadline dates and rule names, and writes the email wording itself.
-const remind = { id: null, items: [], next: 0, preview: null, note: "", error: "", busy: false };
+const remind = { id: null, items: [], scheduled: true, next: 0, preview: null, note: "", error: "", busy: false };
 const IST = (iso) => `${day(iso.slice(0, 10))}, ${iso.slice(11, 16)} IST`;
 
 function renderRemind() {
@@ -471,13 +481,16 @@ function renderRemind() {
   const rows = remind.items.map((i, n) => `<li${n === remind.next ? ' class="next"' : ""}>${esc(IST(i.at))} · ${esc(i.label)}</li>`).join("");
   const preview = remind.preview ? `<div class="preview"><div class="label">${esc(remind.note)}</div>
       <div class="mail"><b>${esc(remind.preview.subject)}</b><pre>${esc(remind.preview.text)}</pre></div></div>` : "";
-  box.innerHTML = `<div class="card-head"><span class="label">Email reminders</span><span class="badge">${remind.items.length} set</span></div>
+  box.innerHTML = `<div class="card-head"><span class="label">Email reminders</span><span class="badge${remind.scheduled ? "" : " grey"}">${remind.scheduled ? `${remind.items.length} set` : "preview only"}</span></div>
     <ol class="reminders">${rows}</ol>
     <div class="remind-actions">
       <button type="button" class="btn" data-remind="send" ${remind.busy ? "disabled" : ""}>Send me reminder ${remind.next + 1} now (demo)</button>
       <button type="button" class="link" data-remind="cancel" ${remind.busy ? "disabled" : ""}>Cancel reminders</button>
     </div>${err}${preview}
-    <p class="note">The real deadlines are in 2027, so the demo button sends one now. Real emails go only to addresses verified in this demo's AWS account; for anyone else you see exactly what would be sent.</p>${privacy}`;
+    ${remind.scheduled
+      ? `<p class="note">The real deadlines are in 2027, so the demo button sends one now.</p>`
+      : `<p class="note"><b>Nothing is scheduled and your address was not kept.</b> Real email goes only to addresses verified in this demo's AWS account. The list shows when reminders would go out, and the button shows exactly what each email would say.</p>`}
+    ${remind.scheduled ? privacy : ""}`;
 }
 
 async function remindCall(path, payload) {
@@ -493,7 +506,7 @@ document.addEventListener("submit", async (e) => {
   if (!email) { remind.error = "Please enter your email address."; renderRemind(); return; }
   const deadlines = ((state.deadlines || {}).deadlines || []).filter((d) => d.date).map((d) => ({ date: d.date, kind: d.kind, citation: d.citation }));
   const r = await remindCall("remind", { email, deadlines });
-  if (r) Object.assign(remind, { id: r.id, items: r.items, next: 0, preview: null, note: "" });
+  if (r) Object.assign(remind, { id: r.id, items: r.items, scheduled: r.scheduled !== false, next: 0, preview: null, note: "" });
   renderRemind();
 });
 document.addEventListener("click", async (e) => {
@@ -508,7 +521,7 @@ document.addEventListener("click", async (e) => {
     }
   } else if (b.dataset.remind === "cancel") {
     const r = await remindCall("remind/cancel", { id: remind.id });
-    if (r) Object.assign(remind, { id: null, items: [], next: 0, preview: null, note: "" });
+    if (r) Object.assign(remind, { id: null, items: [], scheduled: true, next: 0, preview: null, note: "" });
   }
   renderRemind();
 });
@@ -554,7 +567,7 @@ $("new-case").addEventListener("click", async () => {
     const { token } = await apiJson("session", { code: state.code });
     state.token = token; store.set("ll_token", token);
     Object.assign(state, { txns: [], outcome: null, entitlement: null, deadlines: null, drafts: null, draftsAt: null, pending: [], offerDrafts: false });
-    Object.assign(remind, { id: null, items: [], next: 0, preview: null, note: "", error: "" }); renderRemind();
+    Object.assign(remind, { id: null, items: [], scheduled: true, next: 0, preview: null, note: "", error: "" }); renderRemind();
     log.innerHTML = ""; clearQuickReplies(); renderAttachments(); renderCase(); $("case-dot").hidden = true;
     add("msg bot", `<p>${esc(t("welcome", WELCOME))}</p>`);
   } catch (ex) { add("msg err", esc(ex.message)); }

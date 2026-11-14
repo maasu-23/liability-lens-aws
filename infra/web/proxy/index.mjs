@@ -69,7 +69,7 @@ async function session(token) {
 async function remind(path, req) {
   const sessionId = await session(req.token);
   try {
-    if (path.endsWith("/api/remind/send")) return await sendNow({ id: req.id, sessionId, index: req.index });
+    if (path.endsWith("/api/remind/send")) return await sendNow({ id: req.id, sessionId, sessionToken: req.token, index: req.index });
     if (path.endsWith("/api/remind/cancel")) return await cancelReminders({ id: req.id, sessionId });
     return await createReminders({ email: req.email, deadlines: req.deadlines, sessionToken: req.token, sessionId });
   } catch (e) {

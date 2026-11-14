@@ -2,7 +2,8 @@
 
 The caller passes S3 keys, never image bytes (a Gateway tool call is capped at 6 MB). Keys must sit
 under uploads/ and the bucket is fixed by the Lambda's environment, so a caller cannot point the tool
-at another bucket or object. Raw images never go to a model; the returned text is already redacted.
+at another bucket or object. Raw images never go to a model, and neither does the OCR text: only the parsed
+fields come back, so words printed in a screenshot (for example an injected instruction) cannot reach it.
 """
 
 from __future__ import annotations
@@ -17,7 +18,6 @@ from liability_lens.extract import extract_best
 
 MAX_KEYS = 6
 MAX_BYTES = 5_000_000
-MAX_TEXT = 1_200
 KEY_RE = re.compile(r"^uploads/[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$")
 EXTENSIONS = (".png", ".jpg", ".jpeg", ".webp")
 REQUIRED = ("amount", "txn_date", "direction", "utr")
@@ -56,7 +56,6 @@ def _one(key: str, fetch: Callable[[str], bytes]) -> dict:
         "fields": fields,
         "missing": [k for k in REQUIRED if fields[k] is None],
         "secrets_removed": "[SECRET REMOVED]" in text or "[AADHAAR REMOVED]" in text,
-        "text": text[:MAX_TEXT],
     }
 
 

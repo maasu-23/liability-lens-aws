@@ -10,7 +10,13 @@
       "entrypoint": "main.py",
       "codeLocation": "app/agent",
       "runtimeVersion": "PYTHON_3_14",
-      "protocol": "HTTP"
+      "protocol": "HTTP",
+      "envVars": [
+        {
+          "name": "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT",
+          "value": "false"
+        }
+      ]
     }
   ],
   "memories": [
