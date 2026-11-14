@@ -1,16 +1,20 @@
 """Generate synthetic SMS / UPI-receipt screenshots for a FICTIONAL bank, with ground truth.
 
 No real bank names, logos or numbers. Every image is watermarked SYNTHETIC. Seeded, so reruns match.
-Usage: python scripts/make_samples.py
+Usage: python scripts/make_samples.py          # test fixtures
+       python scripts/make_samples.py --demo   # the two screenshots behind the web page's sample case
 """
 import json
 import random
 import re
+import sys
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
-OUT = Path(__file__).resolve().parent.parent / "tests" / "fixtures" / "samples"
+ROOT = Path(__file__).resolve().parent.parent
+OUT = ROOT / "tests" / "fixtures" / "samples"
+DEMO_OUT = ROOT / "web" / "samples"
 LATIN = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 DEVA = "/usr/share/fonts/truetype/noto/NotoSansDevanagari-Regular.ttf"
 DEVA_RE = re.compile(r"[ऀ-ॿ]+")
@@ -96,4 +100,15 @@ def main():
     print(f"wrote {len(truth)} samples to {OUT}")
 
 
-main()
+def demo():
+    """Sunita's two UPI debits on Mon 4 Jan 2027 (the README hero case), one with an OTP line to show redaction."""
+    DEMO_OUT.mkdir(parents=True, exist_ok=True)
+    render(["SampleBank: Rs.25,000.00 debited from A/c XX4821", "on 04-01-27 11:02 to VPA kyc.update@okpay.",
+            "UPI Ref 370041234567.", "482913 is your OTP. Do not share."], DEMO_OUT / "sms-1.png")
+    render(["SampleBank: आपके खाते XX4821 से Rs.15,000.00 डेबिट हुए।", "दिनांक 04-01-27 11:09, प्राप्तकर्ता kyc.update@okpay",
+            "UPI Ref 370041234568"], DEMO_OUT / "sms-2.png")
+    print(f"wrote 2 demo screenshots to {DEMO_OUT}")
+
+
+if __name__ == "__main__":
+    demo() if "--demo" in sys.argv else main()

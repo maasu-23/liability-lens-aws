@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Liability Lens</title>
+<meta name="description" content="What your bank may owe you after an online fraud in India, under which RBI rule, and by when. Free and independent.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231F2A44'/%3E%3Cpath d='M9 6h9l5 5v6' fill='none' stroke='white' stroke-width='2'/%3E%3Ccircle cx='15' cy='18' r='5' fill='none' stroke='white' stroke-width='2'/%3E%3Cpath d='M19 22l4 4' stroke='white' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-lens" viewBox="0 0 48 48"><path d="M12 6h16l8 8v8M12 6v34h12" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linejoin="round"/><path d="M28 6v8h8" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linejoin="round"/><circle cx="30" cy="30" r="7.5" fill="none" stroke="currentColor" stroke-width="2.6"/><path d="M35.5 35.5l6 6" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></symbol>
+  <symbol id="i-phone" viewBox="0 0 24 24"><path d="M6.6 3h3l1.5 4-2 1.3a11 11 0 0 0 6.6 6.6l1.3-2 4 1.5v3A2 2 0 0 1 19 19.6 16.6 16.6 0 0 1 4.4 5 2 2 0 0 1 6.6 3z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+  <symbol id="i-clip" viewBox="0 0 24 24"><path d="M20 11.5l-8 8a5 5 0 0 1-7-7l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7L9.7 17.2a1.7 1.7 0 0 1-2.4-2.4L15 7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24"><path d="M4 12l16-8-6 16-2.5-6.5z" fill="currentColor"/></symbol>
+  <symbol id="i-doc" viewBox="0 0 24 24"><path d="M7 3h7l4 4v14H7z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M14 3v4h4M9.5 12h6M9.5 15.5h6" stroke="currentColor" stroke-width="1.7" fill="none"/></symbol>
+  <symbol id="i-cal" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M4 10h16M9 3v4M15 3v4" stroke="currentColor" stroke-width="1.7"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M5.6 18.4l1.8-1.8M16.6 7.4l1.8-1.8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+  <symbol id="i-tick" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+</svg>
+
+<a class="banner" href="tel:1930"><span data-i18n="banner">Money just left your account? Call 1930 and your bank's fraud line first.</span></a>
+
+<!-- Access gate -->
+<main id="gate" class="gate">
+  <form class="gate-card" id="gate-form" novalidate>
+    <svg class="gate-icon" aria-hidden="true"><use href="#i-lens"/></svg>
+    <h1>Liability Lens</h1>
+    <p class="muted" data-i18n="tagline">What your bank may owe you after an online fraud, under which RBI rule, and by when.</p>
+    <label class="field-label" for="code" data-i18n="code_label">Access code</label>
+    <input id="code" name="code" autocomplete="off" autocapitalize="off" spellcheck="false" required>
+    <p class="hint" data-i18n="code_hint">The access code is in the submission notes.</p>
+    <p class="error" id="gate-error" role="alert" hidden></p>
+    <button class="btn primary wide" id="gate-btn" type="submit" data-i18n="continue">Continue</button>
+    <p class="hint" data-i18n="next_hint">You'll chat with an assistant and watch your case file build up as you go.</p>
+    <p class="hint strong" data-i18n="synthetic_hint">This demo uses synthetic data. Please don't enter real account details.</p>
+  </form>
+  <p class="fine" data-i18n="gate_fine">Independent and free. Not RBI, the Government, the police or your bank. Legal information, not legal advice.</p>
+</main>
+
+<!-- App -->
+<div id="app" class="app" hidden>
+  <header class="topbar">
+    <div class="brand"><svg aria-hidden="true"><use href="#i-lens"/></svg><span>Liability Lens</span></div>
+    <a class="pill amber" href="tel:1930"><svg aria-hidden="true"><use href="#i-phone"/></svg><span data-i18n="call">Call 1930 first</span></a>
+    <div class="spacer"></div>
+    <label class="pill date" title="Deadlines count from this date. RBI's new rules start on 1 Jan 2027, so the demo runs in 2027.">
+      <svg aria-hidden="true"><use href="#i-cal"/></svg><span class="date-label" data-i18n="demo_date">Demo date</span>
+      <span class="date-text" id="as-of-text">6 Jan 2027</span>
+      <input type="date" id="as-of" value="2027-01-06" min="2026-01-01" max="2028-12-31" aria-label="Demo date">
+    </label>
+    <div class="lang" role="group" aria-label="Language">
+      <button type="button" data-lang="en" aria-pressed="true">EN</button><span>|</span><button type="button" data-lang="hi" aria-pressed="false">हिं</button>
+    </div>
+    <span class="tag" data-i18n="synthetic">Synthetic demo data</span>
+    <button type="button" class="link" id="new-case" data-i18n="new_case">New case</button>
+  </header>
+
+  <nav class="tabs" aria-label="View">
+    <button type="button" class="tab" data-tab="chat" aria-selected="true" data-i18n="tab_chat">Chat</button>
+    <button type="button" class="tab" data-tab="case" aria-selected="false"><span data-i18n="tab_case">Case file</span><span class="dot" id="case-dot" hidden></span></button>
+  </nav>
+
+  <div class="columns">
+    <section class="chat" id="chat-pane" aria-label="Chat">
+      <div class="log" id="log" aria-live="polite">
+        <div class="msg bot welcome" id="welcome">
+          <p data-i18n="welcome">Tell me what happened, in your own words. You can upload SMS or UPI screenshots. I'll work out which RBI rule applies, what the bank may owe you, and your deadlines, then draft the paperwork for you to file.</p>
+          <div class="chips">
+            <button type="button" class="chip" id="try-sample" data-i18n="try_sample">Try the sample case</button>
+            <button type="button" class="chip" id="start-own" data-i18n="start_own">Start my case</button>
+          </div>
+        </div>
+      </div>
+      <div class="attachments" id="attachments" hidden></div>
+      <form class="composer" id="composer">
+        <label class="icon-btn" title="Add screenshots">
+          <svg aria-hidden="true"><use href="#i-clip"/></svg>
+          <span class="sr" data-i18n="attach">Add screenshots</span>
+          <input type="file" id="file" accept="image/png,image/jpeg,image/webp" multiple hidden>
+        </label>
+        <textarea id="input" rows="1" maxlength="2000" placeholder="Type in English or Hindi…" data-i18n-placeholder="placeholder" aria-label="Message"></textarea>
+        <button class="send" id="send" type="submit" aria-label="Send"><svg aria-hidden="true"><use href="#i-send"/></svg></button>
+      </form>
+    </section>
+
+    <aside class="case" id="case-pane" aria-label="Case file">
+      <h2 data-i18n="case_file">Case file</h2>
+      <p class="muted small" data-i18n="case_sub">Filled in only by the rules engine, never by the chatbot's own words.</p>
+      <div id="case"></div>
+    </aside>
+  </div>
+
+  <footer class="footer" data-i18n="footer">Independent and free · Not RBI, Government, police, NCRP or your bank · Legal information, not legal advice · Rules last verified 13 Nov 2026</footer>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

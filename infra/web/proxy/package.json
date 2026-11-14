@@ -1,0 +1,13 @@
+{
+  "name": "liability-lens-web-proxy",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Streams the Liability Lens agent to the web page; access code, turn caps and upload links",
+  "dependencies": {
+    "@aws-sdk/client-bedrock-agentcore": "3.1169.0",
+    "@aws-sdk/client-dynamodb": "3.1169.0",
+    "@aws-sdk/client-s3": "3.1169.0",
+    "@aws-sdk/s3-presigned-post": "3.1169.0"
+  }
+}

@@ -26,7 +26,9 @@ Early work. Implemented and tested:
 
 - **Document drafting** (`drafts.py`, `pdf.py`): a complaint letter to the bank, an incident description for the cybercrime portal and an RBI Ombudsman complaint, from fixed templates with no model involved. Every amount, paragraph and date comes from the case tools; the letters assert only the outcomes that favour the customer (the bank must prove the rest, 76K). Phone, email and signature stay as blanks the user fills in by hand. On AWS a second Lambda from the same image writes the PDFs to the bucket (deleted after one day) and returns one-hour download links.
 
-Not built yet: reminders and the web interface.
+- **Web page** (`web/`, `infra/web/`): a static page on S3 behind CloudFront. Chat on the left; on the right a case file (transactions, likely outcome, entitlement with the funding split, a deadline timeline, draft downloads) drawn only from the tool inputs and results the agent streams (`ui_events.py`), never from the model's own words. A Node.js Lambda streams the agent to the page, hands out presigned upload links, and guards cost with an access code plus per-session and daily turn caps counted in DynamoDB. A "Try the sample case" button runs the hero case on two synthetic screenshots.
+
+Not built yet: reminders.
 
 ## Safety and legal limits
 
@@ -57,7 +59,17 @@ Regenerate the synthetic sample images and score the extraction against their gr
 .venv/bin/python scripts/score_ocr.py -v
 ```
 
-`make_samples.py` also needs the DejaVu Sans and Noto Sans Devanagari fonts.
+`make_samples.py` also needs the DejaVu Sans and Noto Sans Devanagari fonts. `--demo` writes the two screenshots behind the web page's sample case.
+
+Deploy to AWS (us-east-1) from a laptop, in this order. There is no pipeline. You need Docker, Node.js 22, the AWS CLI and the AgentCore CLI (`@aws/agentcore`):
+
+```bash
+scripts/deploy_extract.sh   # container image for OCR and drafting, case bucket
+scripts/deploy.sh           # AgentCore runtime, memory and gateway
+scripts/deploy_web.sh       # page, proxy and sessions table; prints the URL
+```
+
+`deploy_web.sh` generates the access code into `.env.local` (git-ignored) on first run. Proxy tests: `node --test infra/web/proxy/proxy.test.mjs`.
 
 ## Layout
 
@@ -70,6 +82,9 @@ Regenerate the synthetic sample images and score the extraction against their gr
 | `app/agent/` | Strands agent (AgentCore Runtime) |
 | `app/tools/` | Gateway Lambda that dispatches the case tools |
 | `agentcore/` | AgentCore project config and CDK app |
+| `src/liability_lens/ui_events.py` | Agent stream to page events (text, tool inputs, tool results) |
+| `web/` | The page: HTML, CSS, JS and the sample screenshots |
+| `infra/web/` | Web stack (S3, CloudFront, DynamoDB) and the streaming proxy Lambda |
 | `infra/extract/` | Container image and stack for the extraction and drafting Lambdas, the case bucket and tool schemas |
 | `tests/` | Unit tests and synthetic fixtures |
 | `scripts/` | Sample generator, OCR scoring, deploy and commit-check scripts |

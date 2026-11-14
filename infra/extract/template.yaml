@@ -19,6 +19,13 @@ Resources:
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
+      # The web page uploads screenshots straight to S3 with a presigned POST from the proxy.
+      CorsConfiguration:
+        CorsRules:
+          - AllowedMethods: [POST]
+            AllowedOrigins: ["*"]
+            AllowedHeaders: ["*"]
+            MaxAge: 600
       LifecycleConfiguration:
         Rules:
           - Id: expire-uploads-after-one-day
