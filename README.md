@@ -93,3 +93,7 @@ scripts/deploy_web.sh       # page, proxy and sessions table; prints the URL
 ## Related work
 
 Several 2026 prototypes already turn screenshots into complaint drafts, including SAFAR, CasePilot and First Hour. As far as research found, none applies the 2027 framework or calculates a rupee entitlement. Liability Lens focuses on that part and treats extraction and drafting as supporting steps.
+
+## Licence
+
+[MIT](LICENSE). The software comes with no warranty. Liability Lens gives legal information, not legal advice, and is not affiliated with RBI, the Government of India or any bank.
