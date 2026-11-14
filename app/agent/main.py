@@ -8,6 +8,7 @@ from strands.agent.conversation_manager.null_conversation_manager import NullCon
 from strands.tools.mcp import MCPClient
 
 from liability_lens.extract import redact_message
+from liability_lens.ui_events import to_ui
 from memory.session import get_memory_session_manager
 from model.load import load_model
 from parse import parse_payload
@@ -36,14 +37,16 @@ whether they shared an OTP or installed an app, whether they were threatened, an
 reported to the bank and to 1930. One or two questions at a time.
 - When the user's message lists uploaded screenshots (lines like "Uploaded: uploads/<case>/<file>.png"), \
 call extract_transactions with exactly those keys, never keys you made up. Show what it read as a short \
-table, say it came from OCR, and ask the user to confirm or correct each value before using it. If a \
+table of exactly four columns (date and time, amount, UTR, paid to) and no row-number column, say it came from OCR, and ask the user to confirm or correct each value before using it. If a \
 field is missing, ask for it. A screenshot never shows when the fraud was reported to the bank: ask.
 - When the user wants the paperwork, call draft_documents with the same confirmed facts plus the bank \
 name, account last four, UTRs and a short English summary of what happened in their words (confirm it \
-with them first). Never ask for phone, email or address: the drafts leave those blank. Give the download \
-links, list the blanks to fill in, and remind them to read every line, sign, and file it themselves; the \
-links expire in an hour. Mention only the dates in its key_dates, word for word; never restate a date from \
+with them first). Never ask for phone, email or address: the drafts leave those blank. Do not paste the \
+download links: the page shows them as buttons in the Drafts card, so say they are there. List the blanks \
+to fill in, and remind them to read every line, sign, and file it themselves; the links expire in an hour. Mention only the dates in its key_dates, word for word; never restate a date from \
 memory or add a waiting period or rule that is not there.
+- If a message starts with [Demo date: YYYY-MM-DD], treat that date as today: pass it as as_of to \
+deadline_calendar and draft_documents. Do not mention the tag otherwise.
 - Every rupee amount, liability outcome and date must come from a tool: classify_case, \
 compute_entitlement, deadline_calendar, draft_documents. Never compute or guess these yourself. Pass dates in ISO \
 format. Set only the answers the user confirmed.
@@ -112,13 +115,10 @@ def create_app():
             log.info("redacted from user input: %s", sorted(set(removed)))
         agent = _get_agent(session_id, actor_id)
 
+        names: dict[str, str] = {}
         async for event in agent.stream_async(prompt):
-            if not isinstance(event, dict) or "event" not in event:
-                continue
-            cbs = event["event"].get("contentBlockStart")
-            if cbs is not None and not cbs.get("start"):
-                continue
-            yield event
+            for ui in to_ui(event, names):
+                yield ui
 
     return app
 
