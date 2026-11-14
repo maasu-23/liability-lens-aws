@@ -16,6 +16,12 @@ if ! grep -q '^LL_ACCESS_CODE=' .env.local; then
   echo "Generated an access code in .env.local"
 fi
 ACCESS_CODE=$(grep '^LL_ACCESS_CODE=' .env.local | cut -d= -f2-)
+# Reminder emails are sent from an address you have verified in SES. It stays in .env.local (git-ignored).
+if ! grep -q '^LL_SENDER_EMAIL=' .env.local; then
+  echo "Add LL_SENDER_EMAIL=<your SES-verified address> to .env.local first." >&2
+  exit 1
+fi
+SENDER_EMAIL=$(grep '^LL_SENDER_EMAIL=' .env.local | cut -d= -f2-)
 
 RUNTIME_ARN=$(aws bedrock-agentcore-control list-agent-runtimes --region "$REGION" \
   --query "agentRuntimes[?agentRuntimeName=='LiabilityLens_default_agent'].agentRuntimeArn | [0]" --output text)
@@ -30,13 +36,13 @@ fi
 
 ( cd infra/web/proxy && npm ci --omit=dev --no-audit --no-fund >/dev/null )
 ZIP=$(mktemp -d)/proxy.zip
-( cd infra/web/proxy && zip -qr "$ZIP" index.mjs package.json node_modules )
+( cd infra/web/proxy && zip -qr "$ZIP" index.mjs reminders.mjs reminder.mjs package.json node_modules )
 KEY="proxy/$(sha256sum "$ZIP" | cut -c1-16).zip"
 aws s3 cp "$ZIP" "s3://$CODE_BUCKET/$KEY" --only-show-errors
 
 aws cloudformation deploy --region "$REGION" --stack-name "$STACK" --template-file infra/web/template.yaml \
   --parameter-overrides CodeBucket="$CODE_BUCKET" CodeKey="$KEY" RuntimeArn="$RUNTIME_ARN" \
-    UploadBucket="$UPLOAD_BUCKET" AccessCode="$ACCESS_CODE" \
+    UploadBucket="$UPLOAD_BUCKET" AccessCode="$ACCESS_CODE" SenderEmail="$SENDER_EMAIL" \
   --capabilities CAPABILITY_IAM --no-fail-on-empty-changeset
 
 out() { aws cloudformation describe-stacks --region "$REGION" --stack-name "$STACK" \

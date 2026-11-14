@@ -28,7 +28,7 @@ Early work. Implemented and tested:
 
 - **Web page** (`web/`, `infra/web/`): a static page on S3 behind CloudFront. Chat on the left; on the right a case file (transactions, likely outcome, entitlement with the funding split, a deadline timeline, draft downloads) drawn only from the tool inputs and results the agent streams (`ui_events.py`), never from the model's own words. A Node.js Lambda streams the agent to the page, hands out presigned upload links, and guards cost with an access code plus per-session and daily turn caps counted in DynamoDB. A "Try the sample case" button runs the hero case on two synthetic screenshots.
 
-Not built yet: reminders.
+- **Email reminders** (`infra/web/proxy/reminders.mjs`, `reminder.mjs`): once the Case file has deadlines, the page offers to email the user at 9 AM IST the day before and on the day of each hard deadline. The proxy validates the address and the dates, stores only the address, the deadline dates and a sent flag in DynamoDB (deleted automatically two days after the last reminder), and creates one-time EventBridge Scheduler entries (Asia/Kolkata, deleted after they run). Each one invokes a small Lambda that sends the email through SES. The wording comes from a fixed table, never from the request, and a "Cancel reminders" button removes the schedules and the record. SES is in sandbox, so real email goes only to addresses verified in the account; everyone else sees a preview of exactly what would be sent. A demo button sends a reminder immediately, since the real deadlines are in 2027.
 
 ## Safety and legal limits
 
@@ -69,7 +69,7 @@ scripts/deploy.sh           # AgentCore runtime, memory and gateway
 scripts/deploy_web.sh       # page, proxy and sessions table; prints the URL
 ```
 
-`deploy_web.sh` generates the access code into `.env.local` (git-ignored) on first run. Proxy tests: `node --test infra/web/proxy/proxy.test.mjs`.
+`deploy_web.sh` generates the access code into `.env.local` (git-ignored) on first run. Add `LL_SENDER_EMAIL=<an address verified in SES>` to the same file first; it is the address reminders are sent from. Proxy tests: `node --test infra/web/proxy/proxy.test.mjs`.
 
 ## Layout
 
@@ -84,7 +84,7 @@ scripts/deploy_web.sh       # page, proxy and sessions table; prints the URL
 | `agentcore/` | AgentCore project config and CDK app |
 | `src/liability_lens/ui_events.py` | Agent stream to page events (text, tool inputs, tool results) |
 | `web/` | The page: HTML, CSS, JS and the sample screenshots |
-| `infra/web/` | Web stack (S3, CloudFront, DynamoDB) and the streaming proxy Lambda |
+| `infra/web/` | Web stack (S3, CloudFront, DynamoDB, EventBridge Scheduler, SES) with the streaming proxy and reminder Lambdas |
 | `infra/extract/` | Container image and stack for the extraction and drafting Lambdas, the case bucket and tool schemas |
 | `tests/` | Unit tests and synthetic fixtures |
 | `scripts/` | Sample generator, OCR scoring, deploy and commit-check scripts |

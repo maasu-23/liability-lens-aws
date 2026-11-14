@@ -12,6 +12,7 @@ import { BedrockAgentCoreClient, InvokeAgentRuntimeCommand } from "@aws-sdk/clie
 import { DynamoDBClient, GetItemCommand, PutItemCommand, UpdateItemCommand } from "@aws-sdk/client-dynamodb";
 import { S3Client } from "@aws-sdk/client-s3";
 import { createPresignedPost } from "@aws-sdk/s3-presigned-post";
+import { RemindError, cancelReminders, createReminders, sendNow } from "./reminders.mjs";
 
 const { RUNTIME_ARN, TABLE, UPLOAD_BUCKET, ACCESS_CODE } = process.env;
 const MAX_TURNS = Number(process.env.MAX_TURNS_PER_SESSION || 30);
@@ -62,6 +63,19 @@ async function session(token) {
   const out = await db.send(new GetItemCommand({ TableName: TABLE, Key: { pk: { S: `s#${token}` } } }));
   if (!out.Item || Number(out.Item.expires.N) < now()) throw new HttpError(401, "Your session ended. Please enter the access code again.");
   return out.Item.session.S;
+}
+
+// Reminders: set (schedule emails), send one now (demo), cancel. See reminders.mjs.
+async function remind(path, req) {
+  const sessionId = await session(req.token);
+  try {
+    if (path.endsWith("/api/remind/send")) return await sendNow({ id: req.id, sessionId, index: req.index });
+    if (path.endsWith("/api/remind/cancel")) return await cancelReminders({ id: req.id, sessionId });
+    return await createReminders({ email: req.email, deadlines: req.deadlines, sessionToken: req.token, sessionId });
+  } catch (e) {
+    if (e instanceof RemindError) throw new HttpError(e.status, e.message);
+    throw e;
+  }
 }
 
 async function countTurn(token) {
@@ -174,6 +188,7 @@ export const handler = awslambda.streamifyResponse(async (event, out) => {
     if (path.endsWith("/api/session")) return json(out, 200, await newSession(req));
     if (path.endsWith("/api/upload")) return json(out, 200, await upload(req));
     if (path.endsWith("/api/chat")) return await chat(req, out);
+    if (path.includes("/api/remind")) return json(out, 200, await remind(path, req));
     throw new HttpError(404, "Not found.");
   } catch (e) {
     if (e instanceof HttpError) return json(out, e.status, { error: e.message });

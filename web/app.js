@@ -324,7 +324,7 @@ function onToolResult(name, data) {
     if (rows.length) { mergeTxns(rows, false); state.askConfirm = true; }
   } else if (name === "classify_case") state.outcome = data;
   else if (name === "compute_entitlement") state.entitlement = data;
-  else if (name === "deadline_calendar") { state.deadlines = data; state.offerDrafts = true; }
+  else if (name === "deadline_calendar") { state.deadlines = data; state.offerDrafts = true; renderRemind(); }
   else if (name === "draft_documents") { state.drafts = data; state.draftsAt = Date.now(); state.offerDrafts = false; state.justDrafted = true; }
   renderCase();
 }
@@ -447,6 +447,72 @@ function renderCase() {
   if ($("app").dataset.tab === "chat") $("case-dot").hidden = false;
 }
 
+// ---- email reminders ---------------------------------------------------------------------
+// Shown once the case has deadlines. Kept outside #case so typing an address is never wiped by a re-render.
+// The server only accepts the deadline dates and rule names, and writes the email wording itself.
+const remind = { id: null, items: [], next: 0, preview: null, note: "", error: "", busy: false };
+const IST = (iso) => `${day(iso.slice(0, 10))}, ${iso.slice(11, 16)} IST`;
+
+function renderRemind() {
+  const box = $("remind");
+  if (!state.deadlines) { box.hidden = true; return; }
+  box.hidden = false;
+  const err = remind.error ? `<p class="error" role="alert">${esc(remind.error)}</p>` : "";
+  const privacy = `<p class="note">Your address is used only for these reminders and is deleted after the last one. Nothing about your case is stored with it.</p>`;
+  if (!remind.id) {
+    box.innerHTML = `<div class="card-head"><span class="label">Email reminders</span></div>
+      <p class="small">I can email you at 9 AM IST the day before and on the day of each hard deadline.</p>
+      <form id="remind-form" class="remind-row" novalidate>
+        <input id="remind-email" type="email" inputmode="email" autocomplete="email" placeholder="you@example.com" aria-label="Your email address" required>
+        <button class="btn primary" type="submit" ${remind.busy ? "disabled" : ""}>${remind.busy ? "Setting…" : "Set reminders"}</button>
+      </form>${err}${privacy}`;
+    return;
+  }
+  const rows = remind.items.map((i, n) => `<li${n === remind.next ? ' class="next"' : ""}>${esc(IST(i.at))} · ${esc(i.label)}</li>`).join("");
+  const preview = remind.preview ? `<div class="preview"><div class="label">${esc(remind.note)}</div>
+      <div class="mail"><b>${esc(remind.preview.subject)}</b><pre>${esc(remind.preview.text)}</pre></div></div>` : "";
+  box.innerHTML = `<div class="card-head"><span class="label">Email reminders</span><span class="badge">${remind.items.length} set</span></div>
+    <ol class="reminders">${rows}</ol>
+    <div class="remind-actions">
+      <button type="button" class="btn" data-remind="send" ${remind.busy ? "disabled" : ""}>Send me reminder ${remind.next + 1} now (demo)</button>
+      <button type="button" class="link" data-remind="cancel" ${remind.busy ? "disabled" : ""}>Cancel reminders</button>
+    </div>${err}${preview}
+    <p class="note">The real deadlines are in 2027, so the demo button sends one now. Real emails go only to addresses verified in this demo's AWS account; for anyone else you see exactly what would be sent.</p>${privacy}`;
+}
+
+async function remindCall(path, payload) {
+  remind.busy = true; remind.error = ""; renderRemind();
+  try { return await apiJson(path, { token: state.token, ...payload }); }
+  catch (e) { remind.error = e.message; return null; }
+  finally { remind.busy = false; renderRemind(); }
+}
+document.addEventListener("submit", async (e) => {
+  if (e.target.id !== "remind-form") return;
+  e.preventDefault();
+  const email = $("remind-email").value.trim();
+  if (!email) { remind.error = "Please enter your email address."; renderRemind(); return; }
+  const deadlines = ((state.deadlines || {}).deadlines || []).filter((d) => d.date).map((d) => ({ date: d.date, kind: d.kind, citation: d.citation }));
+  const r = await remindCall("remind", { email, deadlines });
+  if (r) Object.assign(remind, { id: r.id, items: r.items, next: 0, preview: null, note: "" });
+  renderRemind();
+});
+document.addEventListener("click", async (e) => {
+  const b = e.target.closest("[data-remind]");
+  if (!b) return;
+  if (b.dataset.remind === "send") {
+    const r = await remindCall("remind/send", { id: remind.id, index: remind.next });
+    if (r) {
+      remind.preview = r.preview;
+      remind.note = r.delivered ? `Sent to ${r.preview.to}. This is the email:` : "Demo mode: not sent, because only verified addresses get real email. This is exactly what would be sent:";
+      remind.next = (remind.next + 1) % remind.items.length;
+    }
+  } else if (b.dataset.remind === "cancel") {
+    const r = await remindCall("remind/cancel", { id: remind.id });
+    if (r) Object.assign(remind, { id: null, items: [], next: 0, preview: null, note: "" });
+  }
+  renderRemind();
+});
+
 // ---- gate, tabs, wiring ------------------------------------------------------------------
 function showApp() {
   $("gate").hidden = true;
@@ -488,6 +554,7 @@ $("new-case").addEventListener("click", async () => {
     const { token } = await apiJson("session", { code: state.code });
     state.token = token; store.set("ll_token", token);
     Object.assign(state, { txns: [], outcome: null, entitlement: null, deadlines: null, drafts: null, draftsAt: null, pending: [], offerDrafts: false });
+    Object.assign(remind, { id: null, items: [], next: 0, preview: null, note: "", error: "" }); renderRemind();
     log.innerHTML = ""; clearQuickReplies(); renderAttachments(); renderCase(); $("case-dot").hidden = true;
     add("msg bot", `<p>${esc(t("welcome", WELCOME))}</p>`);
   } catch (ex) { add("msg err", esc(ex.message)); }
