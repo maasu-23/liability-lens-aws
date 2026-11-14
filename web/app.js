@@ -289,7 +289,8 @@ $("file").addEventListener("change", async (e) => {
 const SAMPLE = "My mother got a call on 4 January from someone who said her bank KYC would expire. She read out the OTPs "
   + "and two UPI payments went out. We called 1930 the same evening at 7:30 pm and reported it to the bank on 6 January "
   + "at 10 am. She is an individual with a savings account. Her name is Sunita Sharma, the bank is Example Bank and "
-  + "the account ends in 4821. Screenshots attached.";
+  + "the account ends in 4821. She received an SMS alert from the bank for both debits, and she did not install any "
+  + "app: she only shared the OTPs. Screenshots attached.";
 $("try-sample").addEventListener("click", async () => {
   $("as-of").value = "2027-01-06"; showDate();
   setBusy(true);

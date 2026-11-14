@@ -15,6 +15,9 @@ aws ecr describe-repositories --repository-names "$REPO" --region "$REGION" >/de
   || aws ecr create-repository --repository-name "$REPO" --region "$REGION" \
        --image-scanning-configuration scanOnPush=true >/dev/null
 
+# Keep only the newest 3 images: every deploy pushes a new one, and old ones only cost storage.
+aws ecr put-lifecycle-policy --repository-name "$REPO" --region "$REGION" --lifecycle-policy-text '{"rules":[{"rulePriority":1,"description":"keep the newest 3 images","selection":{"tagStatus":"any","countType":"imageCountMoreThan","countNumber":3},"action":{"type":"expire"}}]}' >/dev/null
+
 aws ecr get-login-password --region "$REGION" | docker login --username AWS --password-stdin "$REGISTRY"
 # Lambda rejects multi-platform manifests, so build one linux/amd64 image without provenance attestations.
 docker build --platform linux/amd64 --provenance=false -f infra/extract/Dockerfile -t "$REGISTRY/$REPO:$TAG" .
