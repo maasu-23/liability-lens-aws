@@ -97,6 +97,7 @@ async function apiJson(path, payload) {
 function inline(s) {
   return esc(s)
     .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, "$1<em>$2</em>")
     .replace(/\[([^\]]+)\]\((https:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
     .replace(/`([^`]+)`/g, "<code>$1</code>");
 }
@@ -166,9 +167,13 @@ function stepDone(el, ok) {
   el.lastElementChild.textContent = el.lastElementChild.textContent.replace(/…$/, "");
   el.querySelector("use").setAttribute("href", ok ? "#i-tick" : "#i-gear");
 }
+// Suggested replies sit in a bar above the message box, outside the scrolling chat, so they are never scrolled out of sight.
+function clearQuickReplies() { const bar = $("quick-bar"); bar.hidden = true; bar.innerHTML = ""; }
 function quickReplies(options) {
-  const box = add("chips quick", options.map((o) => `<button type="button" class="chip">${esc(o)}</button>`).join(""));
-  box.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => { box.remove(); send(b.textContent); }));
+  const bar = $("quick-bar");
+  bar.innerHTML = options.map((o) => `<button type="button" class="chip">${esc(o)}</button>`).join("");
+  bar.hidden = false;
+  bar.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => { const text = b.textContent; clearQuickReplies(); send(text); }));
 }
 
 async function send(text, keysOverride) {
@@ -179,7 +184,7 @@ async function send(text, keysOverride) {
   if (!text && !keys.length) return;
   if (state.pending.some((f) => !f.key)) { add("msg err", "Please wait for the screenshots to finish uploading."); return; }
   $("welcome")?.remove();
-  document.querySelectorAll(".chips.quick").forEach((c) => c.remove());
+  clearQuickReplies();
   userMessage(text || "(screenshots)", files);
   state.pending = []; renderAttachments();
   setBusy(true);
@@ -205,13 +210,14 @@ async function send(text, keysOverride) {
         let ev; try { ev = JSON.parse(line); } catch { continue; }
         if (ev.t === "text") { raw += ev.v; gotText = true; if (!frame) frame = requestAnimationFrame(paint); }
         else if (ev.t === "tool_start") {
-          steps[ev.name] = step(ev.name);
+          (steps[ev.name] ||= []).push(step(ev.name)); // a queue per tool: the same tool can run twice in one turn
           log.appendChild(bot); // keep the reply below its steps
           if (raw && !raw.endsWith("\n")) raw += "\n\n"; // text before and after a tool call are separate paragraphs
         }
         else if (ev.t === "tool_use") onToolUse(ev.name, ev.input || {});
         else if (ev.t === "tool_result") {
-          if (steps[ev.name]) stepDone(steps[ev.name], !(ev.data && ev.data.error));
+          const running = (steps[ev.name] || []).find((el) => el.classList.contains("running"));
+          if (running) stepDone(running, !(ev.data && ev.data.error));
           onToolResult(ev.name, ev.data || {});
         }
         else if (ev.t === "error") throw new Error(ev.v);
@@ -224,9 +230,11 @@ async function send(text, keysOverride) {
     if (state.token) add("msg err", esc(e.message));
   } finally {
     bot.classList.remove("cursor");
-    Object.values(steps).forEach((s) => s.classList.contains("running") && stepDone(s, false));
+    Object.values(steps).flat().forEach((s) => s.classList.contains("running") && stepDone(s, false));
     setBusy(false);
     if (state.askConfirm) { state.askConfirm = false; quickReplies(["Yes, that's correct", "Fix a value"]); }
+    else if (state.offerDrafts && !state.drafts) quickReplies(["Yes, draft the three documents"]);
+    if (state.justDrafted) { state.justDrafted = false; chatDrafts(); }
   }
 }
 function setBusy(on) {
@@ -270,7 +278,8 @@ $("file").addEventListener("change", async (e) => {
 
 const SAMPLE = "My mother got a call on 4 January from someone who said her bank KYC would expire. She read out the OTPs "
   + "and two UPI payments went out. We called 1930 the same evening at 7:30 pm and reported it to the bank on 6 January "
-  + "at 10 am. She is an individual with a savings account. Screenshots attached.";
+  + "at 10 am. She is an individual with a savings account. Her name is Sunita Sharma, the bank is Example Bank and "
+  + "the account ends in 4821. Screenshots attached.";
 $("try-sample").addEventListener("click", async () => {
   $("as-of").value = "2027-01-06"; showDate();
   setBusy(true);
@@ -315,8 +324,8 @@ function onToolResult(name, data) {
     if (rows.length) { mergeTxns(rows, false); state.askConfirm = true; }
   } else if (name === "classify_case") state.outcome = data;
   else if (name === "compute_entitlement") state.entitlement = data;
-  else if (name === "deadline_calendar") state.deadlines = data;
-  else if (name === "draft_documents") { state.drafts = data; state.draftsAt = Date.now(); }
+  else if (name === "deadline_calendar") { state.deadlines = data; state.offerDrafts = true; }
+  else if (name === "draft_documents") { state.drafts = data; state.draftsAt = Date.now(); state.offerDrafts = false; state.justDrafted = true; }
   renderCase();
 }
 
@@ -407,18 +416,30 @@ function deadlineCard() {
   const actions = (d.deadlines || []).filter((i) => !i.date).map((i) => `<p class="note"><b>${esc(i.label)}</b> (${esc(i.citation)})</p>`).join("");
   return card("Deadlines", `<div class="timeline">${html}</div>${actions}<p class="note">Counted from ${esc(day(d.as_of))}. Faded dates are the latest possible reading of a rule.</p>`);
 }
-function draftsCard() {
-  const d = state.drafts;
-  const expired = state.draftsAt && Date.now() - state.draftsAt > 55 * 60 * 1000;
-  const buttons = Object.entries(DOCS).map(([kind, label]) => {
+const draftsExpired = () => Boolean(state.draftsAt) && Date.now() - state.draftsAt > 55 * 60 * 1000;
+function draftButtons(d, expired) {
+  return Object.entries(DOCS).map(([kind, label]) => {
     const doc = d && (d.documents || []).find((x) => x.kind === kind);
     if (doc && !expired) return `<a class="draft" href="${esc(doc.url)}" target="_blank" rel="noopener"><svg class="ok" aria-hidden="true"><use href="#i-tick"/></svg>${esc(label)}</a>`;
-    return `<span class="draft off"><svg aria-hidden="true"><use href="#i-doc"/></svg>${esc(label)}</span>`;
+    return `<button type="button" class="draft pending" data-act="draft"><svg aria-hidden="true"><use href="#i-doc"/></svg>${esc(label)}</button>`;
   }).join("");
-  let note = "Drafts only. You read, sign and file them.";
+}
+// On a phone the Case file is a separate tab, so the same buttons also appear in the chat, under the reply.
+function chatDrafts() {
+  const d = state.drafts;
+  if (!d || !(d.documents || []).length) return;
+  const blanks = d.fill_in && d.fill_in.length ? `Fill in by hand: ${d.fill_in.map(esc).join(" · ")}. ` : "";
+  add("msg bot drafts-inline", `<div class="label">Your drafts</div><div class="drafts">${draftButtons(d, false)}</div>
+    <p class="note">${blanks}Drafts only: read every line, sign and file them yourself. The links work for 1 hour.</p>`);
+}
+function draftsCard() {
+  const d = state.drafts;
+  const expired = draftsExpired();
+  const buttons = draftButtons(d, expired);
+  let note = d ? "Drafts only. You read, sign and file them." : "Tap a button to have these drafted. I'll ask for anything still missing. Drafts only: you read, sign and file them.";
   if (d && d.fill_in && d.fill_in.length) note = `Fill in by hand: ${d.fill_in.map(esc).join(" · ")}. ` + note;
   if (d && !expired) note += " Links expire in 1 hour, so download them now.";
-  if (expired) note = "These links have expired. Ask the assistant to draft them again.";
+  if (expired) note = "These links have expired. Tap a button to have them drafted again.";
   return card("Drafts", `<div class="drafts">${buttons}</div><p class="note">${note}</p>`);
 }
 function renderCase() {
@@ -466,16 +487,31 @@ $("new-case").addEventListener("click", async () => {
   try {
     const { token } = await apiJson("session", { code: state.code });
     state.token = token; store.set("ll_token", token);
-    Object.assign(state, { txns: [], outcome: null, entitlement: null, deadlines: null, drafts: null, draftsAt: null, pending: [] });
-    log.innerHTML = ""; renderAttachments(); renderCase(); $("case-dot").hidden = true;
+    Object.assign(state, { txns: [], outcome: null, entitlement: null, deadlines: null, drafts: null, draftsAt: null, pending: [], offerDrafts: false });
+    log.innerHTML = ""; clearQuickReplies(); renderAttachments(); renderCase(); $("case-dot").hidden = true;
     add("msg bot", `<p>${esc(t("welcome", WELCOME))}</p>`);
   } catch (ex) { add("msg err", esc(ex.message)); }
 });
-document.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () => {
-  $("app").dataset.tab = b.dataset.tab;
-  document.querySelectorAll(".tab").forEach((x) => x.setAttribute("aria-selected", String(x === b)));
-  if (b.dataset.tab === "case") $("case-dot").hidden = true;
-}));
+function showTab(name) {
+  $("app").dataset.tab = name;
+  document.querySelectorAll(".tab").forEach((x) => x.setAttribute("aria-selected", String(x.dataset.tab === name)));
+  if (name === "case") $("case-dot").hidden = true;
+}
+document.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
+
+// A draft button that is not ready yet is still a real button: tapping it starts the drafting if the case has been
+// checked, and otherwise says what is still needed.
+function startDrafting() {
+  showTab("chat");
+  if (state.busy) { add("msg bot", "<p>I'm still answering your last message. Please give me a moment, then tap again.</p>"); return; }
+  if (state.deadlines) {
+    send(state.drafts ? "Please draft the three documents again." : "Yes, draft the three documents.");
+  } else {
+    add("msg bot", `<p>To prepare your drafts I first need your confirmed transactions and a few answers. ${
+      state.txns.length ? "Please reply to my last question below, and I'll draft them straight after." : "Tell me what happened, or try the sample case."}</p>`);
+  }
+}
+document.addEventListener("click", (e) => { if (e.target.closest("[data-act='draft']")) startDrafting(); });
 document.querySelectorAll("[data-lang]").forEach((b) => b.addEventListener("click", () => {
   state.lang = b.dataset.lang;
   store.set("ll_lang", state.lang);
@@ -497,7 +533,11 @@ $("composer").addEventListener("submit", (e) => {
   $("input").value = ""; autosize();
   send(text);
 });
-setInterval(() => { if (state.drafts) renderCase(); }, 60_000);
+let wasExpired = false;
+setInterval(() => {
+  const now = draftsExpired();
+  if (state.drafts && now !== wasExpired) { wasExpired = now; renderCase(); }
+}, 30_000);
 
 state.lang = store.get("ll_lang") === "hi" ? "hi" : "en";
 applyLang();

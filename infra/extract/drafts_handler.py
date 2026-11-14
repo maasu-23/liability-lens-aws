@@ -18,8 +18,13 @@ LINK_SECONDS = 3600
 
 def _store(key: str, data: bytes) -> str:
     _s3.put_object(Bucket=_BUCKET, Key=key, Body=data, ContentType="application/pdf")
-    return _s3.generate_presigned_url("get_object", Params={"Bucket": _BUCKET, "Key": key},
-                                      ExpiresIn=LINK_SECONDS)
+    # The file name travels in the signed URL, so a phone saves "bank-notice.pdf" rather than a random name.
+    name = key.rsplit("/", 1)[-1]
+    return _s3.generate_presigned_url(
+        "get_object",
+        Params={"Bucket": _BUCKET, "Key": key, "ResponseContentType": "application/pdf",
+                "ResponseContentDisposition": f'inline; filename="{name}"'},
+        ExpiresIn=LINK_SECONDS)
 
 
 def handler(event, context):

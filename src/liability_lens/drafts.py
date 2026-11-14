@@ -314,14 +314,31 @@ def ombudsman_complaint(case, p, classified, ent, cal, blanks) -> Document:
 BUILDERS = {"bank_notice": bank_notice, "ncrp_narrative": ncrp_narrative, "ombudsman_complaint": ombudsman_complaint}
 
 
+ALIASES = {
+    "bank_complaint": "bank_notice", "bank_letter": "bank_notice", "bank": "bank_notice",
+    "ncrp": "ncrp_narrative", "cybercrime": "ncrp_narrative", "cybercrime_portal": "ncrp_narrative",
+    "ombudsman": "ombudsman_complaint", "rbi_ombudsman": "ombudsman_complaint",
+}
+
+
+def _kinds(raw) -> list[str]:
+    """Accept the usual shorthand for a document name, drop duplicates, reject anything else."""
+    if raw is None or raw == []:
+        return list(KINDS)
+    if not isinstance(raw, list) or not all(isinstance(k, str) for k in raw):
+        raise ToolInputError(f"documents must be a list drawn from {', '.join(KINDS)}")
+    kinds = list(dict.fromkeys(ALIASES.get(k.strip().lower(), k.strip().lower()) for k in raw))
+    if set(kinds) - set(KINDS):
+        raise ToolInputError(f"documents must be a list drawn from {', '.join(KINDS)}")
+    return kinds
+
+
 def build(case: dict) -> tuple[list[Document], list[str], dict]:
     """Return the requested documents, the blanks the user must fill in, and extra facts for the reply.
 
     Raises ToolInputError with a message the model can turn into a question.
     """
-    kinds = case.get("documents") or list(KINDS)
-    if not isinstance(kinds, list) or set(kinds) - set(KINDS):
-        raise ToolInputError(f"documents must be a list drawn from {', '.join(KINDS)}")
+    kinds = _kinds(case.get("documents"))
     classified = tools.classify_case(case)
     if "error" in classified:
         raise ToolInputError(classified["error"])

@@ -100,6 +100,17 @@ def test_bad_input_is_an_error_not_a_crash(field, value, message):
     assert message in out["error"]
 
 
+def test_usual_shorthand_for_document_names_is_accepted():
+    docs, _, _ = drafts.build({**CASE, "documents": ["bank_complaint", "NCRP", "ombudsman", "bank_notice"]})
+    assert [d.kind for d in docs] == ["bank_notice", "ncrp_narrative", "ombudsman_complaint"]
+    docs, _, _ = drafts.build({**CASE, "documents": []})
+    assert len(docs) == 3
+    out = draft_documents({**CASE, "documents": ["bank_complaint", "fir"]}, lambda k, b: "u")
+    assert "documents must be" in out["error"]
+    out = draft_documents({**CASE, "documents": [5]}, lambda k, b: "u")
+    assert "documents must be" in out["error"]
+
+
 def test_tool_errors_pass_through():
     assert "bank_reported_at" in draft_documents({**CASE, "bank_reported_at": None}, lambda k, b: "u")["error"]
 

@@ -105,7 +105,8 @@ svg { width: 18px; height: 18px; flex: none; }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .chip { border: 1px solid #C9CCD1; background: #fff; border-radius: 999px; padding: 6px 14px; cursor: pointer; font-size: 14px; }
 .chip:hover { border-color: var(--navy); }
-.chips.quick { align-self: flex-start; margin-top: -4px; }
+.quick-bar { display: flex; flex-wrap: wrap; gap: 8px; padding: 2px 2px 8px; }
+.quick-bar .chip { background: var(--navy-soft); border-color: var(--navy); color: var(--navy); font-weight: 500; }
 
 .attachments { display: flex; gap: 8px; flex-wrap: wrap; padding: 6px 2px; }
 .composer { display: flex; align-items: flex-end; gap: 8px; background: #fff; border: 1px solid var(--line); border-radius: var(--radius); padding: 8px; }
@@ -158,7 +159,11 @@ svg { width: 18px; height: 18px; flex: none; }
 .drafts { display: flex; flex-wrap: wrap; gap: 8px; }
 .draft { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--navy); border-radius: 8px; padding: 8px 14px; color: var(--navy); text-decoration: none; background: #fff; font-size: 14.5px; }
 .draft:hover { background: var(--navy-soft); }
-.draft.off { border-color: var(--line); color: var(--faint); pointer-events: none; }
+.msg.drafts-inline .drafts { margin: 8px 0 4px; }
+.msg.drafts-inline .label { margin-bottom: 2px; }
+button.draft { font: inherit; font-size: 14.5px; cursor: pointer; }
+.draft.pending { border-style: dashed; color: var(--muted); }
+.draft.pending:hover { background: var(--navy-soft); color: var(--navy); }
 .draft .ok { color: var(--teal); }
 
 .footer { text-align: center; font-size: 12.5px; color: var(--muted); padding: 8px 16px 10px; border-top: 1px solid var(--line); background: #fff; }
