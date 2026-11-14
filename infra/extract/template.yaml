@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: Liability Lens screenshot extraction - upload bucket and Tesseract Lambda (container image)
+Description: Liability Lens case bucket, Tesseract extraction Lambda and document drafting Lambda (one container image)
 
 Parameters:
   ImageUri:
@@ -24,6 +24,10 @@ Resources:
           - Id: expire-uploads-after-one-day
             Status: Enabled
             Prefix: uploads/
+            ExpirationInDays: 1
+          - Id: expire-drafts-after-one-day
+            Status: Enabled
+            Prefix: drafts/
             ExpirationInDays: 1
           - Id: abort-incomplete-uploads
             Status: Enabled
@@ -82,8 +86,52 @@ Resources:
         Variables:
           EXTRACT_BUCKET: !Ref UploadBucket
 
+  DraftsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: {Service: lambda.amazonaws.com}
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: write-and-share-drafts
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: [s3:PutObject, s3:GetObject]
+                Resource: !Sub "${UploadBucket.Arn}/drafts/*"
+
+  DraftsLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/lambda/liability-lens-drafts
+      RetentionInDays: 7
+
+  DraftsFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: DraftsLogs
+    Properties:
+      FunctionName: liability-lens-drafts
+      PackageType: Image
+      Code: {ImageUri: !Ref ImageUri}
+      ImageConfig:
+        Command: [drafts_handler.handler]
+      Role: !GetAtt DraftsRole.Arn
+      MemorySize: 512
+      Timeout: 30
+      Environment:
+        Variables:
+          EXTRACT_BUCKET: !Ref UploadBucket
+
 Outputs:
   FunctionName:
     Value: !Ref ExtractFunction
+  DraftsFunctionName:
+    Value: !Ref DraftsFunction
   BucketName:
     Value: !Ref UploadBucket

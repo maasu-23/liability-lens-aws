@@ -1,0 +1,188 @@
+[
+  {
+    "name": "draft_documents",
+    "description": "Draft, as PDFs, a complaint letter to the bank, an incident description for the cybercrime portal (NCRP) and a complaint to the RBI Ombudsman, using the same case facts as compute_entitlement. Every amount, paragraph and date is filled in by the rules engine. Returns one-hour download links and the blanks the user must fill in. Drafts only: the user reviews, signs and files them.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "entity": {
+          "type": "string",
+          "description": "Bank type: CB (commercial), SFB, PB (payments bank), LAB, RRB, UCB or RCB. Default CB"
+        },
+        "account_type": {
+          "type": "string",
+          "description": "BSBD, SB, PPI_GIFT, MSME_CA_CC_OD, INDIV_CA_CC_OD_UPTO_25L, CC_UPTO_5L, OTHER_CA_CC_OD or CC_ABOVE_5L. Default SB"
+        },
+        "individual": {
+          "type": "boolean",
+          "description": "True for an individual or sole proprietor"
+        },
+        "answers": {
+          "type": "object",
+          "description": "Interview facts. Set only what the user confirmed; omit unknowns.",
+          "properties": {
+            "missing_sms_alert_over_500": {
+              "type": "boolean",
+              "description": "A debit above Rs 500 came with no SMS alert from the bank"
+            },
+            "bank_ignored_notification": {
+              "type": "boolean",
+              "description": "The bank did not act on the customer's fraud report"
+            },
+            "bank_system_breach": {
+              "type": "boolean",
+              "description": "Bank system breach or internal fraud"
+            },
+            "sim_swap_or_telecom_fault": {
+              "type": "boolean",
+              "description": "SIM swap or telecom operator failure"
+            },
+            "tpap_pa_pg_breach": {
+              "type": "boolean",
+              "description": "Failure of a UPI app, payment aggregator or payment gateway"
+            },
+            "shared_credentials": {
+              "type": "boolean",
+              "description": "The customer shared an OTP, PIN, password or card details with someone"
+            },
+            "ignored_specific_bank_warning": {
+              "type": "boolean",
+              "description": "The customer ignored a specific warning from the bank"
+            },
+            "installed_malicious_app": {
+              "type": "boolean",
+              "description": "The customer installed a screen-sharing or remote-access app at someone's request"
+            },
+            "coerced_approval": {
+              "type": "boolean",
+              "description": "The customer approved payments under threat or duress, e.g. a 'digital arrest' call"
+            },
+            "pure_deception_no_credentials_no_coercion": {
+              "type": "boolean",
+              "description": "The customer was tricked into paying with no credentials shared and no threat"
+            }
+          }
+        },
+        "transactions": {
+          "type": "array",
+          "description": "Each fraudulent debit",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Short id such as t1"
+              },
+              "amount": {
+                "type": "number",
+                "description": "Amount debited, in rupees"
+              },
+              "txn_at": {
+                "type": "string",
+                "description": "Transaction date-time, ISO format, e.g. 2027-01-04T11:02"
+              },
+              "alert_received_date": {
+                "type": "string",
+                "description": "Date the bank's SMS or email alert arrived, ISO date; omit if none"
+              },
+              "cross_border": {
+                "type": "boolean",
+                "description": "True if the payment went abroad"
+              },
+              "utr": {
+                "type": "string",
+                "description": "UTR or reference number of the debit, letters and digits only"
+              },
+              "mode": {
+                "type": "string",
+                "description": "UPI, card, net banking, IMPS or similar"
+              },
+              "beneficiary": {
+                "type": "string",
+                "description": "Who received the money as shown in the bank message, e.g. a UPI ID or masked account"
+              }
+            },
+            "required": [
+              "amount",
+              "txn_at"
+            ]
+          }
+        },
+        "bank_reported_at": {
+          "type": "string",
+          "description": "When the fraud was reported to the bank, ISO date-time (from the bank's acknowledgement if possible)"
+        },
+        "ncrp_reported_at": {
+          "type": "string",
+          "description": "When it was reported on 1930 or cybercrime.gov.in, ISO date-time"
+        },
+        "recoveries_credited": {
+          "type": "number",
+          "description": "Money already credited back to the customer, in rupees (not merely frozen)"
+        },
+        "lifetime_compensation_used": {
+          "type": "boolean",
+          "description": "True if the customer already received 76T compensation once"
+        },
+        "documents": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "bank_notice",
+              "ncrp_narrative",
+              "ombudsman_complaint"
+            ]
+          },
+          "description": "Which drafts to make. Default all three"
+        },
+        "complainant_name": {
+          "type": "string",
+          "description": "The account holder's name as the user gave it. Omit to leave a blank"
+        },
+        "bank_name": {
+          "type": "string",
+          "description": "The bank's name"
+        },
+        "account_last4": {
+          "type": "string",
+          "description": "Last 4 digits of the account or card only, never the full number"
+        },
+        "bank_complaint_ref": {
+          "type": "string",
+          "description": "Complaint number the bank gave, if any"
+        },
+        "ncrp_ack": {
+          "type": "string",
+          "description": "NCRP or 1930 acknowledgement number, if any"
+        },
+        "incident_summary": {
+          "type": "string",
+          "description": "What happened, in English, in the user's own words as confirmed by them (at most 1500 characters). No OTPs, PINs or full numbers"
+        },
+        "bank_reply": {
+          "type": "string",
+          "enum": [
+            "none",
+            "rejected",
+            "partial",
+            "unsatisfactory"
+          ],
+          "description": "The bank's reply so far. Default none"
+        },
+        "bank_reply_date": {
+          "type": "string",
+          "description": "Date of the bank's reply, ISO date"
+        },
+        "as_of": {
+          "type": "string",
+          "description": "Date to print on the letters, ISO date. Leave empty for today"
+        }
+      },
+      "required": [
+        "transactions",
+        "bank_reported_at"
+      ]
+    }
+  }
+]

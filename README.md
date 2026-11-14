@@ -24,7 +24,9 @@ Early work. Implemented and tested:
 - **Agent on AWS** (`agentcore/`, `app/`): a Strands agent on Amazon Bedrock AgentCore Runtime using Claude Sonnet 4.6. It interviews the user, calls the case tools through an AgentCore Gateway backed by a Lambda, and explains the results. It runs deployed in us-east-1.
 - **Screenshot reading on AWS** (`infra/extract/`): a container-image Lambda running Tesseract reads screenshots uploaded to an encrypted S3 bucket (objects expire after one day) and returns the confirmed-by-the-user fields; the agent reaches it through the same Gateway.
 
-Not built yet: document drafting, reminders, and the web interface.
+- **Document drafting** (`drafts.py`, `pdf.py`): a complaint letter to the bank, an incident description for the cybercrime portal and an RBI Ombudsman complaint, from fixed templates with no model involved. Every amount, paragraph and date comes from the case tools; the letters assert only the outcomes that favour the customer (the bank must prove the rest, 76K). Phone, email and signature stay as blanks the user fills in by hand. On AWS a second Lambda from the same image writes the PDFs to the bucket (deleted after one day) and returns one-hour download links.
+
+Not built yet: reminders and the web interface.
 
 ## Safety and legal limits
 
@@ -42,7 +44,7 @@ Requires Python 3.12 or newer and Tesseract with English and Hindi data.
 ```bash
 sudo apt install tesseract-ocr tesseract-ocr-eng tesseract-ocr-hin tesseract-ocr-osd
 python -m venv .venv
-.venv/bin/pip install pytest pillow
+.venv/bin/pip install pytest pillow fpdf2
 .venv/bin/python -m pytest -q
 ```
 
@@ -64,10 +66,11 @@ Regenerate the synthetic sample images and score the extraction against their gr
 | `src/liability_lens/rules.py` | RBI rules as code |
 | `src/liability_lens/tools.py` | JSON tools over the rules engine |
 | `src/liability_lens/extract.py` | OCR, redaction and field parsing |
+| `src/liability_lens/drafts.py`, `pdf.py` | Document templates and PDF rendering |
 | `app/agent/` | Strands agent (AgentCore Runtime) |
 | `app/tools/` | Gateway Lambda that dispatches the case tools |
 | `agentcore/` | AgentCore project config and CDK app |
-| `infra/extract/` | Tesseract Lambda image, upload bucket stack and tool schema |
+| `infra/extract/` | Container image and stack for the extraction and drafting Lambdas, the case bucket and tool schemas |
 | `tests/` | Unit tests and synthetic fixtures |
 | `scripts/` | Sample generator, OCR scoring, deploy and commit-check scripts |
 | `docs/rbi-rules-verification.md` | Sources, paragraph citations and open items |
