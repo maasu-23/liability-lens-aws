@@ -134,6 +134,10 @@ Resources:
           TABLE: !Ref Sessions
           UPLOAD_BUCKET: !Ref UploadBucket
           ACCESS_CODE: !Ref AccessCode
+          MAX_TURNS_PER_SESSION: "30"
+          MAX_TURNS_PER_DAY: "150"
+          MAX_SESSIONS_PER_DAY: "80"
+          MAX_UPLOADS_PER_SESSION: "20"
           SENDER_EMAIL: !Ref SenderEmail
           SCHEDULE_GROUP: !Ref ReminderGroup
           REMINDER_ARN: !GetAtt ReminderFunction.Arn

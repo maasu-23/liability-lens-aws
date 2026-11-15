@@ -620,7 +620,19 @@ setInterval(() => {
   if (state.drafts && now !== wasExpired) { wasExpired = now; renderCase(); }
 }, 30_000);
 
+// One-click link for judges: https://<site>/#code=<access code> fills the code and signs in. The part after # is never sent
+// to a server or written to a log, and it is removed from the address bar straight away.
+function codeFromLink() {
+  const m = /^#code=([A-Za-z0-9_-]{8,64})$/.exec(location.hash);
+  if (!m) return null;
+  history.replaceState(null, "", location.pathname + location.search);
+  return m[1];
+}
+
 state.lang = store.get("ll_lang") === "hi" ? "hi" : "en";
 applyLang();
+const linkCode = codeFromLink();
 state.token = store.get("ll_token");
-if (state.token) showApp(); else $("code").focus();
+if (linkCode) { $("code").value = linkCode; $("gate-form").requestSubmit(); }
+else if (state.token) showApp();
+else $("code").focus();

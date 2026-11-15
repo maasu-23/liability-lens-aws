@@ -4,7 +4,8 @@
 //   POST /api/upload   {token, type, size}          -> {url, fields, key}  presigned S3 POST for one screenshot
 //   POST /api/chat     {token, message, keys, as_of} -> NDJSON stream of agent UI events
 //
-// Cost guards: an access code, a per-session turn cap and a daily turn cap, both counted in DynamoDB.
+// Cost guards: an access code, a per-session turn cap, a daily turn cap, a daily cap on new sessions and a per-session cap
+// on upload links, all counted in DynamoDB.
 // Nothing personal is logged. The agent runtime, bucket and table come from the environment.
 
 import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
@@ -16,7 +17,9 @@ import { RemindError, cancelReminders, createReminders, sendNow } from "./remind
 
 const { RUNTIME_ARN, TABLE, UPLOAD_BUCKET, ACCESS_CODE } = process.env;
 const MAX_TURNS = Number(process.env.MAX_TURNS_PER_SESSION || 30);
-const MAX_DAY = Number(process.env.MAX_TURNS_PER_DAY || 400);
+const MAX_DAY = Number(process.env.MAX_TURNS_PER_DAY || 150);
+const MAX_SESSIONS_DAY = Number(process.env.MAX_SESSIONS_PER_DAY || 80);
+const MAX_UPLOADS = Number(process.env.MAX_UPLOADS_PER_SESSION || 20);
 const SESSION_HOURS = 6;
 const MAX_MESSAGE = 2000;
 const MAX_UPLOAD = 5_000_000;
@@ -31,6 +34,24 @@ class HttpError extends Error {
 }
 
 const now = () => Math.floor(Date.now() / 1000);
+const today = () => new Date().toISOString().slice(0, 10);
+
+// Counts one use against a DynamoDB counter and refuses once the limit is reached. The check and the increment are one
+// atomic write, so simultaneous requests cannot overshoot. Returns false when the limit is already reached.
+export async function countUse(client, table, key, max, ttlSeconds = 3 * 86400) {
+  try {
+    await client.send(new UpdateItemCommand({
+      TableName: table, Key: { pk: { S: key } },
+      UpdateExpression: "ADD uses :one SET expires = if_not_exists(expires, :exp)",
+      ConditionExpression: "attribute_not_exists(uses) OR uses < :max",
+      ExpressionAttributeValues: { ":one": { N: "1" }, ":max": { N: String(max) }, ":exp": { N: String(now() + ttlSeconds) } },
+    }));
+    return true;
+  } catch (e) {
+    if (e.name === "ConditionalCheckFailedException") return false;
+    throw e;
+  }
+}
 
 function body(event) {
   try {
@@ -48,6 +69,9 @@ function codeMatches(given) {
 
 async function newSession(req) {
   if (!codeMatches(req.code)) throw new HttpError(401, "That code didn't work. Check it and try again.");
+  if (!(await countUse(db, TABLE, `sessday#${today()}`, MAX_SESSIONS_DAY))) {
+    throw new HttpError(429, "The demo has reached its limit for new sessions today. Please try again tomorrow.");
+  }
   const token = randomBytes(24).toString("base64url");
   const sessionId = `${randomUUID()}-web`; // AgentCore needs at least 33 characters
   await db.send(new PutItemCommand({
@@ -106,6 +130,9 @@ async function upload(req) {
   const ext = TYPES[req.type];
   if (!ext) throw new HttpError(400, "Please upload a PNG, JPEG or WebP screenshot.");
   if (!(req.size > 0 && req.size <= MAX_UPLOAD)) throw new HttpError(400, "Screenshots must be under 5 MB.");
+  if (!(await countUse(db, TABLE, `up#${req.token}`, MAX_UPLOADS, SESSION_HOURS * 3600 + 3600))) {
+    throw new HttpError(429, "That is the upload limit for this session. Please start a new case.");
+  }
   const key = `uploads/${sessionId}/${randomUUID()}.${ext}`;
   const post = await createPresignedPost(s3, {
     Bucket: UPLOAD_BUCKET, Key: key, Expires: 300,

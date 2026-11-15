@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 globalThis.awslambda = { streamifyResponse: (f) => f, HttpResponseStream: { from: (s) => s } };
-const { events, prompt } = await import("./index.mjs");
+const { countUse, events, prompt } = await import("./index.mjs");
 
 const SID = "11111111-2222-3333-4444-555555555555-web";
 
@@ -99,4 +99,40 @@ test("record round-trips through the DynamoDB shape", () => {
     items: { L: [{ M: { label: { S: "L" }, citation: { S: "76Q" }, date: { S: "2027-02-20" }, when: { S: "today" }, at: { S: "2027-02-20T09:00:00" }, sent: { BOOL: false } } }] } };
   assert.deepEqual(recordFromAttrs(attrs), { id: "abc123xyz", session: "sess", email: "a@b.co",
     items: [{ label: "L", citation: "76Q", date: "2027-02-20", when: "today", at: "2027-02-20T09:00:00", sent: false }] });
+});
+
+// A stand-in for DynamoDB's conditional counter: refuses once the stored count has reached the ":max" the code sent.
+function fakeCounterDb({ failWith } = {}) {
+  const counts = new Map();
+  return {
+    counts,
+    async send(cmd) {
+      if (failWith) throw failWith;
+      const key = cmd.input.Key.pk.S, max = Number(cmd.input.ExpressionAttributeValues[":max"].N);
+      const used = counts.get(key) || 0;
+      if (used >= max) { const e = new Error("conditional check failed"); e.name = "ConditionalCheckFailedException"; throw e; }
+      counts.set(key, used + 1);
+    },
+  };
+}
+
+test("countUse allows exactly the limit, then refuses", async () => {
+  const db = fakeCounterDb();
+  const results = [];
+  for (let i = 0; i < 5; i++) results.push(await countUse(db, "T", "sessday#2027-01-06", 3));
+  assert.deepEqual(results, [true, true, true, false, false]);
+  assert.equal(db.counts.get("sessday#2027-01-06"), 3);
+});
+
+test("countUse keeps separate counters separate (another session or another day starts fresh)", async () => {
+  const db = fakeCounterDb();
+  assert.equal(await countUse(db, "T", "up#tokenA", 1), true);
+  assert.equal(await countUse(db, "T", "up#tokenA", 1), false);
+  assert.equal(await countUse(db, "T", "up#tokenB", 1), true);
+  assert.equal(await countUse(db, "T", "sessday#2027-01-07", 1), true);
+});
+
+test("countUse does not swallow real database errors", async () => {
+  const boom = new Error("throttled"); boom.name = "ProvisionedThroughputExceededException";
+  await assert.rejects(() => countUse(fakeCounterDb({ failWith: boom }), "T", "k", 5), /throttled/);
 });
