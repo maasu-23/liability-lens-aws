@@ -21,7 +21,7 @@ Where RBI's text is ambiguous, the code picks the reading that favours the victi
 
 ## Status
 
-Early work. Implemented and tested:
+What's built, implemented and tested:
 
 - **Rules engine** (`rules.py`): regime selection per transaction date; classification under the 2017 circular and the 2026 directions (paras 76K to 76O and equivalents for each bank category); the 76T compensation (85% of net loss, up to ₹25,000) with the RBI, customer's-bank and beneficiary-bank split and recalculation after recoveries; deadline calendars for both regimes. The tests reproduce RBI's three worked illustrations to the rupee.
 - **Case tools** (`tools.py`): `classify_case`, `compute_entitlement` and `deadline_calendar` turn case facts (JSON) into cited outcomes, rupee amounts and dated deadlines, with every number coming from the rules engine.
@@ -34,6 +34,12 @@ Early work. Implemented and tested:
 - **Web page** (`web/`, `infra/web/`): a static page on S3 behind CloudFront. Chat on the left; on the right a case file (transactions, likely outcome, entitlement with the funding split, a deadline timeline, draft downloads) drawn only from the tool inputs and results the agent streams (`ui_events.py`), never from the model's own words. A Node.js Lambda streams the agent to the page, hands out presigned upload links, and guards cost with an access code, per-session and daily turn caps (30 and 150), a daily cap on new sessions and a per-session cap on upload links, all counted in DynamoDB. A link ending in `#code=<access code>` signs a judge in with one click. A "Try the sample case" button runs the hero case on two synthetic screenshots.
 
 - **Email reminders** (`infra/web/proxy/reminders.mjs`, `reminder.mjs`): once the Case file has deadlines, the page offers to email the user at 9 AM IST the day before and on the day of each hard deadline. The proxy validates the address and the dates, stores only the address, the deadline dates and a sent flag in DynamoDB (deleted automatically two days after the last reminder), and creates one-time EventBridge Scheduler entries (Asia/Kolkata, deleted after they run). Each one invokes a small Lambda that sends the email through SES. The wording comes from a fixed table, never from the request, and a "Cancel reminders" button removes the schedules and the record. SES is in sandbox, so real email goes only to addresses verified in the account; everyone else sees a preview of exactly what would be sent. A demo button sends a reminder immediately, since the real deadlines are in 2027.
+
+## Reuse this pattern
+
+The part worth reusing is not the RBI content. It is the shape: deterministic tools behind an AgentCore Gateway, a model that only interviews and phrases, and a page drawn from tool results rather than model text. The same skeleton fits any domain where a wrong number does real harm, such as insurance claims, tenancy deposits or benefit eligibility.
+
+To adapt it, replace `src/liability_lens/rules.py` and `tools.py` with your own rules and tool functions, change the templates in `drafts.py`, and update the tool schemas. Then rewrite the domain wording in the agent's system prompt (`app/agent/main.py`) and in the page (`web/`). The structure stays: the Lambda tools behind the Gateway, the streaming proxy with its caps, the page that renders tool results, and the deploy scripts.
 
 ## Safety and legal limits
 
@@ -74,7 +80,14 @@ scripts/deploy.sh           # AgentCore runtime, memory and gateway
 scripts/deploy_web.sh       # page, proxy and sessions table; prints the URL
 ```
 
-`deploy_web.sh` generates the access code into `.env.local` (git-ignored) on first run. Add `LL_SENDER_EMAIL=<an address verified in SES>` to the same file first; it is the address reminders are sent from. Proxy tests: `node --test infra/web/proxy/proxy.test.mjs`.
+`deploy_web.sh` generates the access code into `.env.local` (git-ignored) on first run. Add `LL_SENDER_EMAIL=<an address verified in SES>` to the same file first; it is the address reminders are sent from.
+
+Proxy tests need the proxy's dependencies first (`npm ci` in `infra/web/proxy`), then run from the repository root:
+
+```bash
+(cd infra/web/proxy && npm ci --omit=dev)
+node --test infra/web/proxy/proxy.test.mjs
+```
 
 ## Layout
 
