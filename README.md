@@ -8,6 +8,11 @@ RBI's new customer-protection framework applies to transactions from 1 January 2
 
 > **Call 1930 and your bank's 24x7 fraud line first.** Speed decides whether frozen money can be held. Liability Lens is for the days after.
 
+## Live demo and video
+
+- **Video** (1:55, synthetic case, start to finish): https://youtu.be/o8LUcNINKeA
+- **Live demo:** https://d35py7g09fyinx.cloudfront.net. It sits behind an access code to keep the AWS bill under control. To try it, [open an issue](https://github.com/maasu-23/liability-lens-aws/issues/new) and ask for a code.
+
 ## Design principle: the model talks, the code decides
 
 All liability, money and date logic is deterministic Python in [`src/liability_lens/rules.py`](src/liability_lens/rules.py). A language model only interviews the user and writes drafts. It never decides liability, and no amount or deadline comes from it. Output is always a *candidate* classification: the bank classifies, and under RBI's rules the bank carries the burden of proof.
